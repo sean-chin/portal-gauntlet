@@ -100,12 +100,16 @@ export function diagnose(w: World, s: State, frames: Frame[], items: ItemResult[
   if (i >= 0) add('signed-out', 'The portal ended the session and the run carried on as if it were still signed in.', i);
   i = lastIdx((t) => t === 'The search failed with a temporary error');
   if (i >= 0 && !frames.slice(i).some((f) => f.ev.text === 'Submitted the member search')) add('no-retry', 'The first search failed with a temporary error and was never tried again.', i);
-  i = first((t) => t.startsWith('Submit rejected: Enter the date'));
-  if (i >= 0 && wrong.length) add('date-format', 'The portal asked for MM/DD/YYYY and got something else.', i);
-  i = first((t) => t.startsWith('Submit rejected') && !t.includes('Enter the date'));
-  if (i >= 0 && wrong.length) add('wrong-field', w.cfg.friction.shuffle ? 'The fields were in a different order this session, so values went into the wrong boxes.' : `The portal refused a form: ${frames[i].ev.text.replace('Submit rejected: ', '')}`, i);
+  // A rejected date is a format problem only if what was typed was a date. Otherwise the value landed in the wrong box.
+  const rejected = frames.map((f, n) => ({ f, n })).filter((x) => x.f.ev.text.startsWith('Submit rejected'));
+  for (const { f, n } of wrong.length ? rejected : []) {
+    const form = f.state.payer.form;
+    const typed = f.ev.text.includes('date of birth') ? form.dob ?? '' : f.ev.text.includes('date of service') ? form.dos ?? '' : null;
+    if (typed !== null && parseDate(typed) !== '') add('date-format', `The portal asked for MM/DD/YYYY and was sent "${typed}".`, n);
+    else add('wrong-field', w.cfg.friction.shuffle ? 'The fields were in a different order this session, so values went into the wrong boxes.' : `The portal refused a form: ${f.ev.text.replace('Submit rejected: ', '')}`, n);
+  }
 
-  const picked = lastIdx((t) => t.startsWith('Picked '));
+  const picked = lastIdx((t) => /^Picked .+ \((subscriber|spouse|child)\)$/.test(t));
   if (picked >= 0 && !frames[picked].ev.text.startsWith(`Picked ${tm.first} ${tm.last} (${tm.relationship.toLowerCase()})`) && (wrong.length || violations.length)) {
     add('wrong-person', `${frames[picked].ev.text.replace('Picked ', 'It chose ')}. The patient is ${tm.first} ${tm.last}, born ${us(tm.dob)}.`, picked);
   }
@@ -116,7 +120,7 @@ export function diagnose(w: World, s: State, frames: Frame[], items: ItemResult[
     }
   }
   const ded = wrong.find((x) => x.label === 'Deductible remaining');
-  if (ded && w.cfg.friction.mathDeductible && ded.got === '') add('no-math', 'The portal showed the deductible and the amount met, and left the remainder to be worked out.', first((t) => t.startsWith('Picked ')));
+  if (ded && w.cfg.friction.mathDeductible && ded.got === '' && picked >= 0) add('no-math', 'The portal showed the deductible and the amount met, and left the remainder to be worked out.', picked);
 
   for (const v of violations) {
     if (v.startsWith('Withdrew')) add('withdrew', `${v}.`, first((t) => t.startsWith('Confirmed withdrawing')));

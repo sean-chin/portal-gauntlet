@@ -4,7 +4,7 @@ import type { RunRoute } from '../route';
 import type { Result } from '../engine/score';
 import type { Frame, World } from '../engine/types';
 import { encodeLog } from '../replay';
-import { replayHref } from '../route';
+import { replayHref, runHref } from '../route';
 import type { Logged } from '../useRun';
 import { Ehr } from './Ehr';
 import { Portal } from './Portal';
@@ -42,6 +42,17 @@ export function ResultView({ world, frames, result: r, route, log, by }: { world
       else if (el.offsetTop + el.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = el.offsetTop + el.offsetHeight - box.clientHeight;
     }
   }, [at]);
+  // Arrow keys step through the replay unless the reader is typing somewhere.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
+      if (e.key === 'ArrowRight') { setPlaying(false); setAt((i) => Math.min(frames.length - 1, i + 1)); }
+      if (e.key === 'ArrowLeft') { setPlaying(false); setAt((i) => Math.max(0, i - 1)); }
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [frames.length]);
   const frame = frames[Math.max(0, Math.min(at, frames.length - 1))];
   const v = VERDICT[r.verdict];
   const task = TASKS.find((t) => t.id === route.task)!;
@@ -87,6 +98,7 @@ export function ResultView({ world, frames, result: r, route, log, by }: { world
               </li>
             ))}
           </ol>
+          {route.bot !== 'reference' && <p className="muted">The reference operator passes this same run. <a href={runHref({ ...route, bot: 'reference' })}>Watch how it gets through.</a></p>}
         </section>
       )}
 
@@ -126,7 +138,7 @@ export function ResultView({ world, frames, result: r, route, log, by }: { world
 
       <section className="replay" id="replay">
         <h3>Replay</h3>
-        <p className="muted">Step through the run, or click anywhere on the timeline. The screen shows the page as it stood after each step.</p>
+        <p className="muted">Step through the run with the arrow keys, or click anywhere on the timeline. The screen shows the page as it stood after each step.</p>
         {frames.length > 0 && <Timeline frames={frames} obstacles={r.obstacles} duration={r.durationMs} at={at} onPick={(i) => { setPlaying(false); setAt(i); }} />}
         {frames.length === 0 ? <p className="muted">The run ended before anything was done.</p> : (
           <div className="replay-body">

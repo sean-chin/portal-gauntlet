@@ -90,3 +90,29 @@ describe('replay links', () => {
     expect(validate([[0, { type: 'tab', tab: 'ehr', extra: '<script>' }]])).toEqual([[0, { type: 'tab', tab: 'ehr' }]]);
   });
 });
+
+import { readSummary } from '../src/ui/Report';
+describe('results file', () => {
+  it('keeps known fields and throws away the rest', () => {
+    const g = readSummary({ agent: 'mine<script>', rows: [
+      { task: 'eligibility', level: 'calm', seed: 1, verdict: 'pass', score: 100, actions: 20, reference: 16, causes: [], replay: 'https://x.example/#/replay?task=eligibility&level=calm&seed=1&log=zAbC_-' },
+      { task: 'eligibility', level: 'hostile', seed: 2, verdict: 'weird', score: 900, causes: ['popup', 'made-up'], replay: 'javascript:alert(1)' },
+      { task: 'nope', level: 'calm', seed: 3 },
+    ] })!;
+    expect(g.name).toBe('minescript');
+    expect(g.rows).toHaveLength(2);
+    expect(g.rows[0].href).toBe('#/replay?task=eligibility&level=calm&seed=1&log=zAbC_-');
+    expect(g.rows[1]).toMatchObject({ verdict: 'error', score: 100, causes: ['popup'], href: '#/run?task=eligibility&level=hostile&seed=2' });
+    expect(readSummary({ rows: 'x' })).toBeNull();
+    expect(readSummary(null)).toBeNull();
+  });
+});
+describe('diagnosis wording', () => {
+  it('tells a wrong date format apart from a value in the wrong box', () => {
+    const fmt = simulate(makeCfg('eligibility', 2, 'custom', ['strictDates']), 'recorded').result;
+    expect(fmt.causes.map((c) => c.id)).toContain('date-format');
+    const box = simulate(makeCfg('eligibility', 2, 'custom', ['shuffle']), 'patched').result;
+    expect(box.causes.map((c) => c.id)).toContain('wrong-field');
+    expect(box.causes.map((c) => c.id)).not.toContain('date-format');
+  });
+});

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { POLICIES } from '../engine/bots';
 import { LEVELS, makeCfg, TASKS } from '../engine/world';
 import { runHref, type RunRoute } from '../route';
 import { useRun } from '../useRun';
 import { Ehr } from './Ehr';
+import { Pointer } from './Pointer';
 import { Portal } from './Portal';
 
 // Three short runs that between them show a harmful mistake, a clean solve under pressure and a stale read.
@@ -23,6 +24,7 @@ function Reel({ route, onDone }: { route: RunRoute; onDone: () => void }) {
     const id = window.setTimeout(onDone, 5000);
     return () => window.clearTimeout(id);
   }, [result, onDone]);
+  const box = useRef<HTMLDivElement>(null);
   const last = live.frames[live.frames.length - 1]?.ev;
   const noop = () => undefined;
   const who = POLICIES.find((p) => p.id === route.bot)!.name;
@@ -34,10 +36,11 @@ function Reel({ route, onDone }: { route: RunRoute; onDone: () => void }) {
         <span><b>{who}</b> doing a {what} on the {how} portal</span>
         <a href={runHref(route)}>Open this run</a>
       </figcaption>
-      <div className="demo-screen" aria-hidden="true">
+      <div className="demo-screen" aria-hidden="true" ref={box}>
         {s.tab === 'ehr' && <Ehr world={live.world} state={s} dispatch={noop} frozen />}
         {s.tab === 'payer' && <Portal world={live.world} state={s} dispatch={noop} frozen />}
         {s.tab === 'auth' && <div className="auth"><h2>Authenticator</h2><p className="code">{s.payer.mfaCode || 'No code waiting'}</p></div>}
+        {!result && <Pointer point={live.point} box={box} />}
         {result && (
           <div className={`demo-end ${result.verdict}`}>
             <b>{WORD[result.verdict]}, {result.score} out of 100</b>

@@ -4,6 +4,7 @@ import type { RunRoute } from '../route';
 import type { Live } from '../useRun';
 import { Ehr } from './Ehr';
 import { Portal } from './Portal';
+import { Timeline } from './Timeline';
 
 const VERDICT = {
   pass: { word: 'Pass', line: 'Every field is right and nothing harmful happened.' },
@@ -17,7 +18,7 @@ export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
   const frames = live.frames;
   // Open the replay where the trouble started, if there was any.
   const firstBad = frames.findIndex((f) => !f.ev.ok);
-  const [at, setAt] = useState(firstBad >= 0 ? firstBad : 0);
+  const [at, setAt] = useState(r.causes[0] ? Math.min(r.causes[0].frame, Math.max(0, frames.length - 1)) : firstBad >= 0 ? firstBad : 0);
   const [playing, setPlaying] = useState(false);
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -64,6 +65,20 @@ export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
         </section>
       )}
 
+      {r.causes.length > 0 && (
+        <section className="causes" data-testid="causes">
+          <h3>Why it fell short</h3>
+          <ol>
+            {r.causes.map((c, i) => (
+              <li key={c.id}>
+                <div><b>{c.title}</b>{i === 0 && r.causes.length > 1 ? <em>first thing to go wrong</em> : null}<p>{c.detail}</p></div>
+                {frames.length > 0 && <button type="button" className="btn small" onClick={() => { setPlaying(false); setAt(c.frame); document.getElementById('replay')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Show the step</button>}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <div className="cols">
         <section>
           <h3>Fields</h3>
@@ -98,9 +113,10 @@ export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
         </section>
       </div>
 
-      <section className="replay">
+      <section className="replay" id="replay">
         <h3>Replay</h3>
-        <p className="muted">Step through the run. The screen shows the page as it stood after each step. Red steps did nothing, amber ones are the portal acting on its own.</p>
+        <p className="muted">Step through the run, or click anywhere on the timeline. The screen shows the page as it stood after each step.</p>
+        {frames.length > 0 && <Timeline frames={frames} obstacles={r.obstacles} duration={r.durationMs} at={at} onPick={(i) => { setPlaying(false); setAt(i); }} />}
         {frames.length === 0 ? <p className="muted">The run ended before anything was done.</p> : (
           <div className="replay-body">
             <ol className="events" data-testid="events" ref={list}>

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { POLICIES, type PolicyId } from '../engine/bots';
 import type { Cfg } from '../engine/types';
 import { FRICTION_INFO, LEVELS, makeCfg, TASKS } from '../engine/world';
 import { runHref, type RunRoute } from '../route';
 import { useRun } from '../useRun';
 import { Ehr } from './Ehr';
+import { Pointer } from './Pointer';
 import { Portal } from './Portal';
 import { ResultView } from './Result';
 
@@ -12,7 +13,11 @@ const clock = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms 
 
 export function Bench({ route }: { route: RunRoute }) {
   const cfg: Cfg = useMemo(() => makeCfg(route.task, route.seed, route.level), [route.task, route.seed, route.level]);
-  const live = useRun(cfg, route.bot);
+  const [paused, setPaused] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const ctl = useMemo(() => ({ paused, speed }), [paused, speed]);
+  const live = useRun(cfg, route.bot, ctl);
+  const box = useRef<HTMLDivElement>(null);
   const { world: w, state: s, dispatch, result } = live;
   const task = TASKS.find((t) => t.id === cfg.task)!;
   const level = LEVELS.find((l) => l.id === cfg.level)!;
@@ -72,12 +77,12 @@ export function Bench({ route }: { route: RunRoute }) {
                 <button type="button" className="btn" onClick={() => setConfirm(false)}>Keep working</button>
               </div>
             ) : <button type="button" className="btn solid" data-testid="finish" onClick={() => setConfirm(true)}>Mark work order complete</button>)}
-            {route.bot && <p className="rail-meta">Watching a scripted run. Nothing here is a language model.</p>}
           </section>
         )}
         {s.done && (
           <section className="rail-end">
-            <a className="btn solid" href={runHref({ ...route, bot: null })}>Try this run yourself</a>
+            {route.bot ? <a className="btn solid" href={runHref({ ...route, bot: null })}>Try this run yourself</a>
+              : <button type="button" className="btn solid" onClick={() => window.location.reload()}>Run it again</button>}
             <a className="btn" href={runHref({ ...route, seed: route.seed + 1 })}>Next seed</a>
           </section>
         )}
@@ -85,9 +90,10 @@ export function Bench({ route }: { route: RunRoute }) {
       <main className="stage">
         {result ? <ResultView live={live} route={route} /> : (
           <>
+            <div className="live" ref={box}>
             <div className="tabs" role="tablist">
               {tabs.map((t) => (
-                <button key={t.id} type="button" role="tab" aria-selected={s.tab === t.id} data-testid={`tab-${t.id}`} className={s.tab === t.id ? 'tab on' : 'tab'} onClick={() => dispatch({ type: 'tab', tab: t.id })}>{t.label}</button>
+                <button key={t.id} type="button" role="tab" aria-selected={s.tab === t.id} data-testid={`tab-${t.id}`} {...(route.bot ? { 'data-act': `tab:${t.id}` } : {})} className={s.tab === t.id ? 'tab on' : 'tab'} onClick={() => dispatch({ type: 'tab', tab: t.id })}>{t.label}</button>
               ))}
             </div>
             <div className="screen" role="tabpanel">
@@ -102,6 +108,19 @@ export function Bench({ route }: { route: RunRoute }) {
                 </div>
               )}
             </div>
+            {route.bot && <Pointer point={live.point} box={box} />}
+            </div>
+            {route.bot && (
+              <div className="botbar">
+                <button type="button" className="btn small" onClick={() => setPaused((x) => !x)}>{paused ? 'Resume' : 'Pause'}</button>
+                <label>Speed
+                  <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                    <option value={0.5}>Half</option><option value={1}>Normal</option><option value={2}>Double</option><option value={6}>Fast</option>
+                  </select>
+                </label>
+                <span className="muted">A scripted run, not a language model.</span>
+              </div>
+            )}
             <BotLine frames={live.frames} bot={route.bot} />
           </>
         )}

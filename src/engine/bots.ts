@@ -36,9 +36,12 @@ function script(w: World): Step[] {
     index: c.caps.matchMember ? c.s.payer.results.findIndex((i) => w.members[i].dob === target.dob && w.members[i].first === target.first) : 0,
   });
   const signIn: Step[] = [
+    () => ({ type: 'payer.set', key: 'user', value: w.creds.user }),
+    () => ({ type: 'payer.set', key: 'pass', value: w.creds.pass }),
     (c) => { c.mem.loggedIn = true; return { type: 'payer.login', user: w.creds.user, pass: w.creds.pass }; },
     // The code lives in another tab, so reading it costs two tab switches, as it would for any agent.
-    ...(f.mfa ? [(() => ({ type: 'tab', tab: 'auth' })) as Step, (() => ({ type: 'tab', tab: 'payer' })) as Step, ((c) => ({ type: 'payer.mfa', code: c.s.payer.mfaCode })) as Step] : []),
+    ...(f.mfa ? [(() => ({ type: 'tab', tab: 'auth' })) as Step, (() => ({ type: 'tab', tab: 'payer' })) as Step,
+      ((c) => ({ type: 'payer.set', key: 'code', value: c.s.payer.mfaCode })) as Step, ((c) => ({ type: 'payer.mfa', code: c.s.payer.mfaCode })) as Step] : []),
   ];
   const lookup: Step[] = [fill('lookup', 'memberId', () => target.memberId), fill('lookup', 'dob', (c) => date(c, target.dob)), submit, pick];
   const write = (id: string, values: (c: Ctx) => Record<string, string>): Step[] => [

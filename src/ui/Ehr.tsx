@@ -1,5 +1,6 @@
 import { longDate } from '../engine/dates';
 import type { Action, State, World } from '../engine/types';
+import { act } from './Pointer';
 import { ehrFields, SOP, VISIT_LABEL } from '../engine/world';
 
 interface P { world: World; state: State; dispatch: (a: Action) => void; frozen?: boolean }
@@ -32,7 +33,7 @@ export function Ehr({ world: w, state: s, dispatch, frozen }: P) {
               {w.patients.map((p) => (
                 <tr key={p.id}>
                   <td>{p.appt}</td><td>{p.last}, {p.first}</td><td>{p.mrn}</td><td>{longDate(p.dob)}</td><td>{VISIT_LABEL[p.visit]}</td>
-                  <td><button type="button" data-testid={`ehr-open-${p.mrn}`} onClick={() => dispatch({ type: 'ehr.open', id: p.id })}>Open chart</button></td>
+                  <td><button type="button" data-testid={`ehr-open-${p.mrn}`} {...act(frozen, `open:${p.id}`)} onClick={() => dispatch({ type: 'ehr.open', id: p.id })}>Open chart</button></td>
                 </tr>
               ))}
             </tbody>
@@ -49,7 +50,7 @@ export function Ehr({ world: w, state: s, dispatch, frozen }: P) {
                 <tr key={c.no}>
                   <td>{c.no}</td><td>{c.patient}</td><td>{longDate(c.dos)}</td><td>${c.billed.toFixed(2)}</td>
                   <td>{c.mine ? 'You' : OTHERS[i % 2]}</td><td>{e.saved[c.no] ? 'Yes' : 'No'}</td>
-                  <td><button type="button" data-testid={`ehr-open-${c.no}`} onClick={() => dispatch({ type: 'ehr.open', id: c.no })}>Open claim</button></td>
+                  <td><button type="button" data-testid={`ehr-open-${c.no}`} {...act(frozen, `open:${c.no}`)} onClick={() => dispatch({ type: 'ehr.open', id: c.no })}>Open claim</button></td>
                 </tr>
               ))}
             </tbody>
@@ -100,19 +101,19 @@ export function Ehr({ world: w, state: s, dispatch, frozen }: P) {
                 <label key={f.key} htmlFor={`ehr-${f.key}`}>
                   <span>{f.label}</span>
                   {f.type === 'select' ? (
-                    <select id={`ehr-${f.key}`} data-testid={`ehr-${f.key}`} value={e.form[f.key] ?? ''} onChange={(ev) => dispatch({ type: 'ehr.set', key: f.key, value: ev.target.value })}>
+                    <select id={`ehr-${f.key}`} data-testid={`ehr-${f.key}`} {...act(frozen, `eset:${f.key}`)} value={e.form[f.key] ?? ''} onChange={(ev) => dispatch({ type: 'ehr.set', key: f.key, value: ev.target.value })}>
                       <option value="">Select</option>
                       {f.options!.map((o) => <option key={o}>{o}</option>)}
                     </select>
                   ) : (
-                    <input id={`ehr-${f.key}`} data-testid={`ehr-${f.key}`} autoComplete="off" value={e.form[f.key] ?? ''} onChange={(ev) => dispatch({ type: 'ehr.set', key: f.key, value: ev.target.value })} />
+                    <input id={`ehr-${f.key}`} data-testid={`ehr-${f.key}`} {...act(frozen, `eset:${f.key}`)} autoComplete="off" value={e.form[f.key] ?? ''} onChange={(ev) => dispatch({ type: 'ehr.set', key: f.key, value: ev.target.value })} />
                   )}
                 </label>
               ))}
             </div>
             <div className="ehr-actions">
-              <button type="button" data-testid="ehr-save" onClick={() => dispatch({ type: 'ehr.save' })}>Save</button>
-              <button type="button" data-testid="ehr-back" onClick={() => dispatch({ type: 'ehr.back' })}>Back to {claims ? 'queue' : 'schedule'}</button>
+              <button type="button" data-testid="ehr-save" {...act(frozen, 'ehr.save')} onClick={() => dispatch({ type: 'ehr.save' })}>Save</button>
+              <button type="button" data-testid="ehr-back" {...act(frozen, 'ehr.back')} onClick={() => dispatch({ type: 'ehr.back' })}>Back to {claims ? 'queue' : 'schedule'}</button>
               {e.banner && <span className="ehr-saved" role="status">{e.banner}</span>}
             </div>
           </fieldset>

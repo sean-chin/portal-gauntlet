@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { us } from '../engine/dates';
 import { hash } from '../engine/rng';
 import type { Action, FieldDef, State, VisitType, World } from '../engine/types';
+import { act } from './Pointer';
 import { CARC, dateHint, payerForm, VISIT_LABEL, type FormId } from '../engine/world';
 
 interface P { world: World; state: State; dispatch: (a: Action) => void; frozen?: boolean }
@@ -14,6 +15,7 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
   // Calm keeps stable hooks. Everything else gets ids that change with every session, as real portals do.
   const tid = (name: string) => (f.testIds ? { 'data-testid': `portal-${name}` } : {});
   const fid = (key: string) => (f.testIds ? `portal-${key}` : `c${hash(w.cfg.seed, p.sessionN, key).toString(36)}`);
+  const ak = (key: string) => act(frozen, key);
   const set = (key: string, value: string) => dispatch({ type: 'payer.set', key, value });
   const submit = () => dispatch({ type: 'payer.submit' });
 
@@ -21,18 +23,20 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
     <label key={d.key} htmlFor={fid(d.key)} className="pp-field">
       <span>{d.label}{hint ? <em> ({hint})</em> : null}</span>
       {d.type === 'select' ? (
-        <select id={fid(d.key)} {...tid(d.key)} value={p.form[d.key] ?? ''} onChange={(e) => set(d.key, e.target.value)}>
+        <select id={fid(d.key)} {...tid(d.key)} {...ak(`set:${d.key}`)} value={p.form[d.key] ?? ''} onChange={(e) => set(d.key, e.target.value)}>
           <option value="">Select one</option>
           {d.options!.map((o) => <option key={o}>{o}</option>)}
         </select>
       ) : (
-        <input id={fid(d.key)} {...tid(d.key)} autoComplete="off" value={p.form[d.key] ?? ''} onChange={(e) => set(d.key, e.target.value)} />
+        <input id={fid(d.key)} {...tid(d.key)} {...ak(`set:${d.key}`)} autoComplete="off" value={p.form[d.key] ?? ''} onChange={(e) => set(d.key, e.target.value)} />
       )}
     </label>
   );
   const form = (id: FormId) => payerForm(w.cfg, p.sessionN, id).map((d) => field(d, d.key === 'dob' || d.key === 'dos' ? dateHint(w.cfg) : undefined));
+  const ACT: Record<string, string> = { signin: 'payer.login', verify: 'payer.mfa', submit: 'payer.submit', back: 'payer.back', withdraw: 'payer.decoy', home: 'nav:home',
+    'modal-ok': 'modal:dismiss', 'modal-stay': 'modal:stay', 'modal-confirm': 'modal:confirm', 'modal-cancel': 'modal:cancel' };
   const btn = (label: string, name: string, onClick: () => void, cls = '') => (
-    <button type="button" className={cls} {...tid(name)} onClick={onClick}>{label}</button>
+    <button type="button" className={cls} {...tid(name)} {...ak(ACT[name] ?? name.replace('pick-', 'pick:'))} onClick={onClick}>{label}</button>
   );
   const err = p.error ? <div className="pp-error" role="alert">{p.error}</div> : null;
   const member = p.memberIdx >= 0 ? w.members[p.memberIdx] : null;
@@ -45,9 +49,9 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
         <h2>Provider sign in</h2>
         {err}
         <label htmlFor={fid('user')} className="pp-field"><span>Username</span>
-          <input id={fid('user')} {...tid('user')} autoComplete="off" value={p.form.user ?? ''} onChange={(e) => set('user', e.target.value)} /></label>
+          <input id={fid('user')} {...tid('user')} {...ak('set:user')} autoComplete="off" value={p.form.user ?? ''} onChange={(e) => set('user', e.target.value)} /></label>
         <label htmlFor={fid('pass')} className="pp-field"><span>Password</span>
-          <input id={fid('pass')} {...tid('pass')} type="password" autoComplete="off" value={p.form.pass ?? ''} onChange={(e) => set('pass', e.target.value)} /></label>
+          <input id={fid('pass')} {...tid('pass')} {...ak('set:pass')} type="password" autoComplete="off" value={p.form.pass ?? ''} onChange={(e) => set('pass', e.target.value)} /></label>
         {btn('Sign in', 'signin', () => dispatch({ type: 'payer.login', user: p.form.user ?? '', pass: p.form.pass ?? '' }), 'pp-primary')}
         <p className="pp-small">Use of this system is monitored. Sessions end after a period of inactivity.</p>
       </div>
@@ -59,7 +63,7 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
         <p>Enter the six-digit code from your authenticator app.</p>
         {err}
         <label htmlFor={fid('code')} className="pp-field"><span>Verification code</span>
-          <input id={fid('code')} {...tid('code')} inputMode="numeric" autoComplete="off" value={p.form.code ?? ''} onChange={(e) => set('code', e.target.value)} /></label>
+          <input id={fid('code')} {...tid('code')} {...ak('set:code')} inputMode="numeric" autoComplete="off" value={p.form.code ?? ''} onChange={(e) => set('code', e.target.value)} /></label>
         {btn('Verify', 'verify', () => dispatch({ type: 'payer.mfa', code: p.form.code ?? '' }), 'pp-primary')}
       </div>
     );
@@ -142,7 +146,7 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
         <div className="pp-form">{form(p.screen)}</div>
         {p.screen === 'pa2' && (
           <label className="pp-check" htmlFor={fid('urgent')}>
-            <input id={fid('urgent')} {...tid('urgent')} type="checkbox" checked={p.form.urgent === 'yes'} onChange={(e) => set('urgent', e.target.checked ? 'yes' : '')} />
+            <input id={fid('urgent')} {...tid('urgent')} {...ak('set:urgent')} type="checkbox" checked={p.form.urgent === 'yes'} onChange={(e) => set('urgent', e.target.checked ? 'yes' : '')} />
             <span>Request expedited review. I attest that a delay could seriously jeopardize the life or health of the member.</span>
           </label>
         )}
@@ -227,11 +231,11 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
       <div className="pp-head">
         <div className="pp-logo"><b>Harborline</b> Health Plan</div>
         <div className="pp-sub">Provider Portal</div>
-        {p.session === 'in' && <button type="button" className="pp-link" {...tid('signout')} onClick={() => dispatch({ type: 'payer.logout' })}>Sign out</button>}
+        {p.session === 'in' && <button type="button" className="pp-link" {...tid('signout')} {...ak('payer.logout')} onClick={() => dispatch({ type: 'payer.logout' })}>Sign out</button>}
       </div>
       {p.session === 'in' && (
         <div className="pp-nav">
-          {nav.map(([label, screen]) => <button key={screen} type="button" {...tid(`nav-${screen}`)} onClick={() => dispatch({ type: 'payer.nav', screen })}>{label}</button>)}
+          {nav.map(([label, screen]) => <button key={screen} type="button" {...tid(`nav-${screen}`)} {...ak(`nav:${screen}`)} onClick={() => dispatch({ type: 'payer.nav', screen })}>{label}</button>)}
         </div>
       )}
       <div className="pp-main">{body}</div>

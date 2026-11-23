@@ -148,7 +148,7 @@ export function Report() {
       <header className="hero">
         <a className="back" href="#/">Portal Gauntlet</a>
         <h1>Report</h1>
-        <p className="lede">Every run of every scripted operator, one square each, with the reasons runs fell short. Load the summary your own agent produced to see it on the same page.</p>
+        <p className="lede">Every run of every scripted operator, one square each, with why runs fell short. Load your agent's summary to see it here too.</p>
       </header>
       <div className="report-bar">
         <label>Seeds per row

@@ -138,7 +138,7 @@ export function ResultView({ world, frames, result: r, route, log, by }: { world
 
       <section className="replay" id="replay">
         <h3>Replay</h3>
-        <p className="muted">Step through the run with the arrow keys, or click anywhere on the timeline. The screen shows the page as it stood after each step.</p>
+        <p className="muted">Step through with the arrow keys or click the timeline. The screen shows the page after each step.</p>
         {frames.length > 0 && <Timeline frames={frames} obstacles={r.obstacles} duration={r.durationMs} at={at} onPick={(i) => { setPlaying(false); setAt(i); }} />}
         {frames.length === 0 ? <p className="muted">The run ended before anything was done.</p> : (
           <div className="replay-body">

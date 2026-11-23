@@ -61,10 +61,34 @@ describe('scripts', () => {
       expect(simulate(makeCfg(task, seed, 'calm'), 'patched').result.verdict).toBe('pass');
       if (simulate(makeCfg(task, seed, 'typical'), 'patched').result.verdict === 'pass') typical++;
       // Claim follow-up has a one-field form, so reordering cannot hurt a positional script there.
+      // What catches it is the claim history, and only on seeds where a claim has more than one line.
       if (task !== 'claim-status') expect(simulate(makeCfg(task, seed, 'hostile'), 'patched').result.verdict).not.toBe('pass');
     }
     expect(typical).toBeGreaterThan(5);
     expect(typical).toBeLessThan(55);
+  });
+});
+
+describe('claim history', () => {
+  it('shows more than one line on most hostile runs and trips a script that reads the first', () => {
+    let tripped = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const cfg = makeCfg('claim-status', seed, 'hostile');
+      const w = buildWorld(cfg);
+      for (const c of w.claims) expect(c.history[c.history.length - 1]).toMatchObject({ status: c.status, carc: c.carc, paid: c.paid });
+      if (simulate(cfg, 'patched').result.verdict !== 'pass') tripped++;
+    }
+    expect(tripped).toBeGreaterThan(15);
+  });
+});
+
+describe('determinism', () => {
+  it('gives the same one-time code for the same seed whenever the sign-in happens', () => {
+    const w = buildWorld(makeCfg('eligibility', 9, 'typical'));
+    const a = step(w, initialState(), { type: 'payer.login', user: w.creds.user, pass: w.creds.pass }, 10).state.payer.mfaCode;
+    const b = step(w, initialState(), { type: 'payer.login', user: w.creds.user, pass: w.creds.pass }, 98765).state.payer.mfaCode;
+    expect(a).toMatch(/^\d{6}$/);
+    expect(a).toBe(b);
   });
 });
 

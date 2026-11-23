@@ -1,4 +1,4 @@
-import { parseDate } from './dates';
+import { parseDate, us } from './dates';
 import type { Frame, Obstacle, ScoreItem, State, World } from './types';
 
 export interface ItemResult { label: string; expected: string; got: string; ok: boolean; where: ScoreItem['where'] }
@@ -57,7 +57,7 @@ export function violationsOf(w: World, s: State): string[] {
 export function scoreRun(w: World, s: State, frames: Frame[], reference: number): Result {
   const items: ItemResult[] = w.items.map((it) => { const g = got(w, s, it);
     const touched = it.where === 'ehr' && Object.values(s.ehr.saved[it.record!] ?? {}).some((x) => x.trim() !== '');
-    return { label: it.label, expected: it.expected === '' ? '(blank)' : it.expected, got: g, ok: matches(it, g, touched), where: it.where };
+    return { label: it.label, expected: it.expected === '' ? '(blank)' : it.kind === 'date' ? us(it.expected) : it.expected, got: g, ok: matches(it, g, touched), where: it.where };
   });
   const correct = items.filter((i) => i.ok).length;
   const frac = correct / items.length;

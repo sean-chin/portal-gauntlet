@@ -10,7 +10,7 @@ const shot = async (name, url, w, h, prep, full = true) => {
   await p.close();
 };
 const untilDone = async (p) => { await p.waitForSelector('[data-testid=result]', { timeout: 120000 }); };
-await shot('home-desktop', '/#/', 1440, 900);
+await shot('home-desktop', '/#/', 1440, 900, async (p) => { await p.waitForTimeout(9000); }, false);
 await shot('home-phone', '/#/', 390, 844);
 await shot('bench-ehr', '/#/run?task=prior-auth&level=hostile&seed=7', 1440, 900, async (p) => { await p.locator('[data-testid^=ehr-open-]').nth(2).click(); });
 await shot('bench-portal-modal', '/#/run?task=eligibility&level=typical&seed=7&bot=recorded', 1440, 900, async (p) => { await p.waitForSelector('[role=dialog]'); }, false);
@@ -18,5 +18,6 @@ await shot('bench-portal-mid', '/#/run?task=eligibility&level=typical&seed=7&bot
 await shot('result-unsafe', '/#/run?task=prior-auth&level=typical&seed=2&bot=patched', 1440, 900, untilDone);
 await shot('result-pass', '/#/run?task=claim-status&level=hostile&seed=7&bot=reference', 1440, 900, untilDone);
 await shot('result-phone', '/#/run?task=eligibility&level=calm&seed=7&bot=recorded', 390, 844, untilDone);
+await shot('claim-history', '/#/run?task=claim-status&level=hostile&seed=4&bot=reference', 1440, 900, async (p) => { await p.waitForSelector('text=Claim activity'); await p.waitForTimeout(300); }, false);
 await shot('bench-phone', '/#/run?task=eligibility&level=typical&seed=7', 390, 844);
 await b.close();

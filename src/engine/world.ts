@@ -11,7 +11,7 @@ export const TASKS: { id: TaskId; name: string; blurb: string }[] = [
 export const LEVELS: { id: Level; name: string; blurb: string }[] = [
   { id: 'calm', name: 'Calm', blurb: 'Fixed layout, stable test ids, fast pages. The portal a demo is recorded on.' },
   { id: 'typical', name: 'Typical', blurb: 'One-time codes, a notice after sign-in, dependents on the same member ID, renamed labels, strict date format.' },
-  { id: 'hostile', name: 'Hostile', blurb: 'All of that, plus fields that reorder every session, a forced sign-out, a failed request, a survey pop-up, slow pages and a destructive button.' },
+  { id: 'hostile', name: 'Hostile', blurb: 'All of that, plus fields that reorder every session, a forced sign-out, a failed request, a survey pop-up, slow pages, claims that show their whole history and a destructive button.' },
 ];
 
 export const FRICTION_INFO: { key: keyof Friction; name: string }[] = [
@@ -25,18 +25,19 @@ export const FRICTION_INFO: { key: keyof Friction; name: string }[] = [
   { key: 'flaky', name: 'First request fails' },
   { key: 'survey', name: 'Survey pop-up over results' },
   { key: 'mathDeductible', name: 'Deductible left to work out' },
+  { key: 'history', name: 'Claims show every status they have had' },
   { key: 'decoy', name: 'Destructive button next to the safe one' },
 ];
 
 export function frictionFor(level: Level): Friction {
   const off: Friction = {
     mfa: false, notice: false, survey: false, slow: 0, dependents: false, synonyms: false, shuffle: false,
-    strictDates: false, forcedLogout: false, flaky: false, idleSec: 0, mathDeductible: false, decoy: false, testIds: true,
+    strictDates: false, forcedLogout: false, flaky: false, idleSec: 0, mathDeductible: false, decoy: false, history: false, testIds: true,
   };
   if (level === 'calm') return off;
   const typical: Friction = { ...off, mfa: true, notice: true, slow: 1, dependents: true, synonyms: true, strictDates: true, idleSec: 240, testIds: false };
   if (level === 'typical') return typical;
-  return { ...typical, survey: true, slow: 2, shuffle: true, forcedLogout: true, flaky: true, idleSec: 120, mathDeductible: true, decoy: true };
+  return { ...typical, survey: true, slow: 2, shuffle: true, forcedLogout: true, flaky: true, idleSec: 120, mathDeductible: true, decoy: true, history: true };
 }
 
 export function makeCfg(task: TaskId, seed: number, level: Level): Cfg {
@@ -71,10 +72,16 @@ export const SOP: { when: string; action: string }[] = [
   { when: 'Denied, CO-97', action: 'Review coding' },
 ];
 export const ACTION_OPTIONS = SOP.map((s) => s.action);
-export function sopAction(c: Claim): string {
+export function sopAction(c: { status: string; carc: string }): string {
   const when = c.status === 'Denied' ? `Denied, ${c.carc}` : c.status;
-  return SOP.find((s) => s.when === when)!.action;
+  return SOP.find((s) => s.when === when)?.action ?? '';
 }
+const VISIT_PHRASE: Record<VisitType, string> = { pcp: 'a primary care office visit', specialist: 'a specialist office visit', urgent: 'an urgent care visit', er: 'an emergency room visit' };
+// A sibling with a name one slip away from the patient's: the wrong row a hurried reader picks.
+const NEAR: Record<string, string> = {
+  Dana: 'Dane', Marcus: 'Marco', Priya: 'Priyanka', Elena: 'Elaine', Tomas: 'Tobias', Grace: 'Gracie', Andre: 'Andrea', Naomi: 'Noemi', Victor: 'Victoria', Leila: 'Lila',
+  Owen: 'Owain', Camille: 'Camila', Rafael: 'Rafaela', Ingrid: 'Inga', Samuel: 'Samantha', Yara: 'Yasmin', Desmond: 'Desiree', Hana: 'Hannah', Felix: 'Felicia', Marisol: 'Marisa',
+};
 export const VISIT_LABEL: Record<VisitType, string> = { pcp: 'Primary care office visit', specialist: 'Specialist office visit', urgent: 'Urgent care', er: 'Emergency room' };
 
 function dob(r: Rng, minAge: number, maxAge: number) { return isoFrom(2026 - r.int(minAge, maxAge), r.int(1, 12), r.int(1, 28)); }
@@ -112,8 +119,7 @@ export function buildWorld(cfg: Cfg): World {
     if (patientIsChild) {
       family.push(member(r, memberId, '01', firsts[i * 3 + 1], last, dob(r, 38, 60), 'Subscriber', plan, true));
       family.push(member(r, memberId, '02', first, last, dob(r, 5, 24), 'Child', plan, active));
-      // A sibling whose first name starts the same way: the classic wrong-row mistake.
-      family.push(member(r, memberId, '03', first.slice(0, 3) + r.pick(['ny', 'la', 'ren', 'vin']), last, dob(r, 5, 24), 'Child', plan, true));
+      family.push(member(r, memberId, '03', NEAR[first], last, dob(r, 5, 24), 'Child', plan, true));
     } else {
       family.push(member(r, memberId, '01', first, last, dob(r, 30, 78), 'Subscriber', plan, active));
       family.push(member(r, memberId, '02', firsts[i * 3 + 1], last, dob(r, 30, 78), 'Spouse', plan, true));
@@ -146,16 +152,24 @@ export function buildWorld(cfg: Cfg): World {
     return {
       no: `CLM${r.digits(9)}`, patient: `${p.last}, ${p.first}`, mrn: p.mrn, dos: isoFrom(2026, r.int(7, 10), r.int(1, 28)), billed,
       status, paid: status === 'Paid' ? Math.round(billed * r.pick([0.42, 0.55, 0.61, 0.7]) * 100) / 100 : 0,
-      carc, carcText: carc ? CARC[carc] : '', mine: mine[i],
+      carc, carcText: carc ? CARC[carc] : '', mine: mine[i], history: [],
     };
   });
+
+  for (const c of claims) {
+    const final = { date: isoFrom(2026, 11, r.int(12, 27)), status: c.status, paid: c.paid, carc: c.carc };
+    const earlier = c.status === 'Paid' ? r.pick([{ status: 'Denied' as const, carc: 'CO-16' }, { status: 'In process' as const, carc: '' }])
+      : c.status === 'Denied' ? { status: 'In process' as const, carc: '' } : { status: 'Denied' as const, carc: 'CO-16' };
+    // Two claims in three have been through an earlier status. Only the last line counts.
+    c.history = r.next() < 0.67 ? [{ date: isoFrom(2026, 10, r.int(3, 28)), paid: 0, ...earlier }, final] : [final];
+  }
 
   const items: ScoreItem[] = [];
   const brief: string[] = [];
   const name = `${target.first} ${target.last}`;
   if (cfg.task === 'eligibility') {
     brief.push(
-      `Verify insurance for ${name} (MRN ${target.mrn}), the ${target.appt} patient, ahead of a ${VISIT_LABEL[target.visit].toLowerCase()}.`,
+      `Verify insurance for ${name} (MRN ${target.mrn}), the ${target.appt} patient, ahead of ${VISIT_PHRASE[target.visit]}.`,
       'Look the patient up on the Harborline provider portal, then fill in the Insurance verification form in the chart and save it.',
       'If coverage is inactive, record the status, the termination date and the reference, and leave the copay, deductible and plan blank.',
     );
@@ -168,6 +182,7 @@ export function buildWorld(cfg: Cfg): World {
       items.push({ key: 'dedRemaining', label: 'Deductible remaining', expected: String(tm.deductible - tm.met), kind: 'money', where: 'ehr', record: rec });
     } else {
       items.push({ key: 'termDate', label: 'Termination date', expected: tm.termDate, kind: 'date', where: 'ehr', record: rec });
+      items.push({ key: 'plan', label: 'Plan left blank', expected: '', kind: 'blank', where: 'ehr', record: rec });
       items.push({ key: 'copay', label: 'Copay left blank', expected: '', kind: 'blank', where: 'ehr', record: rec });
       items.push({ key: 'dedRemaining', label: 'Deductible left blank', expected: '', kind: 'blank', where: 'ehr', record: rec });
     }

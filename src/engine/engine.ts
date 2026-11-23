@@ -15,6 +15,14 @@ export function initialState(): State {
   };
 }
 
+const NAMES: Record<string, string> = {
+  memberId: 'member ID', dob: 'date of birth', cpt: 'procedure code', icd: 'diagnosis code', dos: 'date of service', pos: 'place of service', units: 'units',
+  npi: 'NPI', provider: 'ordering provider', claimNo: 'claim number', urgent: 'expedited box', status: 'status', plan: 'plan name', copay: 'copay',
+  dedRemaining: 'deductible remaining', termDate: 'termination date', ref: 'payer reference', paRef: 'authorization reference', paStatus: 'authorization status',
+  paid: 'amount paid', carc: 'denial code', action: 'next action',
+};
+const setText = (key: string, value: string) => (key === 'urgent' ? (value ? 'Ticked the expedited box' : 'Cleared the expedited box') : `Set ${NAMES[key] ?? key} to "${value}"`);
+
 const MODAL_NAME: Record<ModalKind, string> = {
   notice: 'Notice after sign-in', survey: 'Survey pop-up', expiring: 'Session about to expire', withdraw: 'Withdraw confirmation',
 };
@@ -89,7 +97,7 @@ export function step(w: World, s0: State, a: Action, at: number): Out {
     else if (a.type === 'ehr.back') { e = { ...e, screen: 'list', recordId: '', form: {} }; did('ehr', 'Went back to the list'); }
     else if (a.type === 'ehr.set') {
       if (e.screen !== 'record') { did('ehr', 'Typed with no record open', false); return { state: { ...s, blocked: s.blocked + 1 }, evs }; }
-      e = { ...e, form: { ...e.form, [a.key]: a.value } }; did('ehr', `Set ${a.key} to "${a.value}"`);
+      e = { ...e, form: { ...e.form, [a.key]: a.value } }; did('ehr', setText(a.key, a.value));
     } else if (a.type === 'ehr.save') {
       if (e.screen !== 'record') { did('ehr', 'Saved with no record open', false); return { state: { ...s, blocked: s.blocked + 1 }, evs }; }
       e = { ...e, saved: { ...e.saved, [e.recordId]: { ...e.form } }, banner: 'Saved' }; did('ehr', `Saved record ${e.recordId}`);
@@ -138,7 +146,7 @@ export function step(w: World, s0: State, a: Action, at: number): Out {
     if (p.session === 'in') return block('Signed in while already signed in');
     if (a.user.trim() !== w.creds.user || a.pass !== w.creds.pass) { p = { ...p, error: 'The username or password is incorrect.' }; did('portal', 'Sign-in rejected', false); return { state: { ...s, payer: p }, evs }; }
     did('portal', 'Entered username and password');
-    if (f.mfa) p = { ...p, session: 'mfa', screen: 'mfa', error: '', mfaCode: rng('mfa', w.cfg.seed, p.sessionN, at).digits(6) };
+    if (f.mfa) p = { ...p, session: 'mfa', screen: 'mfa', error: '', mfaCode: rng('mfa', w.cfg.seed, w.cfg.task, p.sessionN).digits(6) };
     else signIn();
     return { state: { ...s, payer: { ...p, lastActive: at } }, evs };
   }
@@ -164,7 +172,7 @@ export function step(w: World, s0: State, a: Action, at: number): Out {
   } else if (a.type === 'payer.set') {
     counted = p.lastSetKey !== a.key;
     p = { ...p, form: { ...p.form, [a.key]: a.value }, lastSetKey: a.key };
-    did('portal', `Set ${a.key} to "${a.value}"`);
+    did('portal', setText(a.key, a.value));
   } else if (a.type === 'payer.back') {
     const to = ({ eligDetail: 'elig', eligResults: 'elig', paResults: 'pa1', pa2: 'pa1', pa3: 'pa2', paReview: 'pa3', claimDetail: 'claims' } as Record<string, PayerState['screen']>)[p.screen];
     if (!to) return block('Pressed back where there was nothing to go back to');
@@ -243,8 +251,8 @@ export function pushFrames(frames: Frame[], evs: Ev[], state: State): Frame[] {
   const out = [...frames];
   for (const ev of evs) {
     const last = out[out.length - 1];
-    const key = /^Set (\S+) to /.exec(ev.text)?.[1];
-    if (key && last && last.ev.who === 'agent' && last.ev.app === ev.app && last.ev.text.startsWith(`Set ${key} to `)) out[out.length - 1] = { ev, state };
+    const key = /^Set (.+?) to "/.exec(ev.text)?.[1];
+    if (key && last && last.ev.who === 'agent' && last.ev.app === ev.app && last.ev.text.startsWith(`Set ${key} to "`)) out[out.length - 1] = { ev, state };
     else out.push({ ev, state });
   }
   return out;

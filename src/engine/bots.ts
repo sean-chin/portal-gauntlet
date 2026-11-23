@@ -37,7 +37,8 @@ function script(w: World): Step[] {
   });
   const signIn: Step[] = [
     (c) => { c.mem.loggedIn = true; return { type: 'payer.login', user: w.creds.user, pass: w.creds.pass }; },
-    ...(f.mfa ? [((c) => ({ type: 'payer.mfa', code: c.s.payer.mfaCode })) as Step] : []),
+    // The code lives in another tab, so reading it costs two tab switches, as it would for any agent.
+    ...(f.mfa ? [(() => ({ type: 'tab', tab: 'auth' })) as Step, (() => ({ type: 'tab', tab: 'payer' })) as Step, ((c) => ({ type: 'payer.mfa', code: c.s.payer.mfaCode })) as Step] : []),
   ];
   const lookup: Step[] = [fill('lookup', 'memberId', () => target.memberId), fill('lookup', 'dob', (c) => date(c, target.dob)), submit, pick];
   const write = (id: string, values: (c: Ctx) => Record<string, string>): Step[] => [
@@ -77,7 +78,9 @@ function script(w: World): Step[] {
       fill('claims', 'claimNo', () => cl.no), submit,
       (c) => {
         if (c.s.payer.screen === 'claimDetail' && c.s.payer.claimNo === cl.no) {
-          c.mem.read[cl.no] = { status: cl.status, paid: cl.status === 'Paid' ? String(cl.paid) : '', carc: cl.carc, action: sopAction(cl) };
+          // With the history showing, a script that reads the first line gets a status the claim no longer has.
+          const line = f.history && !c.caps.math ? cl.history[0] : cl;
+          c.mem.read[cl.no] = { status: line.status, paid: line.status === 'Paid' ? String(line.paid) : '', carc: line.carc, action: sopAction(line) };
         }
         return null;
       },

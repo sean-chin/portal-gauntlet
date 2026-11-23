@@ -3,6 +3,7 @@ import { POLICIES, simulate, type PolicyId } from '../engine/bots';
 import type { Level, TaskId } from '../engine/types';
 import { LEVELS, makeCfg, TASKS } from '../engine/world';
 import { runHref } from '../route';
+import { Demo } from './Demo';
 
 const SEEDS = 20;
 
@@ -32,16 +33,19 @@ function matrix(): Record<PolicyId, Record<Level, Cell>> {
 const SNIPPET = `import { chromium } from 'playwright';
 
 const page = await (await chromium.launch()).newPage();
-await page.goto(BASE + '/#/run?task=prior-auth&level=hostile&seed=7');
+await page.goto(
+  BASE + '/#/run?task=prior-auth&level=hostile&seed=7');
 
-// The brief and the portal sign-in, as your agent would read them off the page.
+// The work order and the portal sign-in.
 const task = await page.evaluate(() => window.gauntlet.task);
 
-await runYourAgent(page, task);   // clicks and types like a person would
+// Your agent clicks and types like a person would.
+await runYourAgent(page, task);
 
 await page.getByTestId('finish').click();
 await page.getByTestId('finish-confirm').click();
-console.log(await page.evaluate(() => window.gauntlet.result()));`;
+const result = await page.evaluate(
+  () => window.gauntlet.result());`;
 
 export function Landing() {
   const [task, setTask] = useState<TaskId>('prior-auth');
@@ -57,6 +61,8 @@ export function Landing() {
         <h1>Portal Gauntlet</h1>
         <p className="lede">A practice range for computer-use agents that do hospital admin work. It has a fake EHR, a fake payer portal that misbehaves the way real ones do, and a scorecard with a replay at the end of every run.</p>
       </header>
+
+      <Demo />
 
       <section className="start" aria-labelledby="start-h">
         <h2 id="start-h">Start a run</h2>
@@ -130,7 +136,7 @@ export function Landing() {
           <h2 id="agent-h">Point your own agent at it</h2>
           <p>Every run is a URL. Open it in any browser your agent can drive, let it work through the screens, then press the finish button. The page hands back the scorecard as JSON.</p>
           <p>Calm gives you stable <code>data-testid</code> hooks on the portal. Typical and hostile take them away and rotate element ids every session, so the agent has to read the page. The EHR keeps its hooks at every level.</p>
-          <p>The repo includes a Playwright harness that plays the reference operator through the real page, which is a quick way to see the plumbing work end to end.</p>
+          <p>The repo has a runner that does this for a batch of seeds and writes one JSON summary. Drop in a module that exports <code>agent(page, task)</code> and run <code>npm run bench</code>. A reference agent that reads only what is on screen is included, and it passes every task at every level.</p>
         </div>
         <pre><code>{SNIPPET}</code></pre>
       </section>

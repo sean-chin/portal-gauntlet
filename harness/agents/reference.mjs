@@ -1,16 +1,6 @@
-// Plays every task through the real page with Playwright, reading only what is on screen.
-// It is the example of how to wire an agent in, and the end-to-end test for the bench itself.
-//
-//   npm run build && npm run preview &     then     npm run e2e
-//   BASE=https://your-deploy.example npm run e2e -- --level hostile --seed 7
-import { chromium } from 'playwright';
-
-const BASE = process.env.BASE ?? 'http://localhost:4173';
-const arg = (name, d) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : d; };
-const levels = arg('level', 'calm,typical,hostile').split(',');
-const tasks = arg('task', 'eligibility,prior-auth,claim-status').split(',');
-const seeds = arg('seed', '7').split(',').map(Number);
-
+// A reference agent that reads only what is on screen: labels, tables and text. No test ids on the portal,
+// no peeking at page state. It is the proof that every run can be solved through the real page, and a
+// template for wiring in your own agent: export `agent(page, task)` and leave the page ready to finish.
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const toUs = (long) => { const m = /([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/.exec(long); return `${String(MON.indexOf(m[1]) + 1).padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`; };
 const num = (s) => Number(s.replace(/[^0-9.]/g, ''));
@@ -22,7 +12,7 @@ const LABEL = {
   npi: /npi/i, provider: /provider name|requesting clinician/i, claimNo: /claim (number|id|reference)/i,
 };
 
-async function operator(page, task) {
+export async function agent(page, task) {
   const portal = page.locator('[data-app=portal]');
   const tab = (id) => page.getByTestId(`tab-${id}`).click();
   const pairs = (root) => root.evaluate((el) => Object.fromEntries([...el.querySelectorAll('dt')].map((dt) => [dt.textContent.trim(), dt.nextElementSibling?.textContent.trim() ?? ''])));
@@ -105,7 +95,7 @@ async function operator(page, task) {
 
   if (task.id === 'eligibility') {
     const mrn = /MRN (\d+)/.exec(task.brief[0])[1];
-    const visit = /ahead of an? (.+)\./.exec(task.brief[0])[1];
+    const visit = /primary/.test(task.brief[0]) ? 'Primary care' : /specialist/.test(task.brief[0]) ? 'Specialist' : /urgent/.test(task.brief[0]) ? 'Urgent care' : 'Emergency';
     const patient = await chart(mrn);
     const found = await onPortal(async () => {
       await press('Eligibility');
@@ -149,7 +139,14 @@ async function operator(page, task) {
       for (const no of claims) {
         await fill('claimNo', no);
         await search();
-        const d = await pairs(portal);
+        let d = await pairs(portal);
+        // Some portals list every status the claim has had. The newest line is the one that counts.
+        const lines = await portal.locator('tbody tr').evaluateAll((rows) => rows.map((r) => [...r.cells].map((c) => c.textContent.trim())));
+        if (lines.length) {
+          const stamp = (us) => us.slice(6) + us.slice(0, 2) + us.slice(3, 5);
+          const [, status, paid, reason] = lines.sort((a, b) => stamp(a[0]).localeCompare(stamp(b[0]))).at(-1);
+          d = { Status: status, 'Paid amount': paid, 'Adjustment reason': reason };
+        }
         const carc = d['Adjustment reason'] ? d['Adjustment reason'].split(':')[0] : '';
         out[no] = { status: d.Status, paid: d.Status === 'Paid' ? num(d['Paid amount']) : '', carc, action: policy[carc ? `${d.Status}, ${carc}` : d.Status] };
         await press('Back to search');   // never the Withdraw button that sits beside it
@@ -163,34 +160,5 @@ async function operator(page, task) {
       await page.getByTestId('ehr-back').click();
     }
   }
-  await page.getByTestId('finish').click();
-  await page.getByTestId('finish-confirm').click();
 }
 
-const browser = await chromium.launch();
-const jobs = [];
-for (const task of tasks) for (const level of levels) for (const seed of seeds) jobs.push({ task, level, seed });
-let failed = 0;
-await Promise.all(jobs.map(async (j) => {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const errors = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  try {
-    await page.goto(`${BASE}/#/run?task=${j.task}&level=${j.level}&seed=${j.seed}`);
-    const task = await page.evaluate(() => window.gauntlet.task);
-    await operator(page, task);
-    const r = await page.evaluate(() => window.gauntlet.result());
-    const ok = r.verdict === 'pass' && errors.length === 0;
-    if (!ok) failed++;
-    console.log(`${ok ? 'ok  ' : 'FAIL'} ${j.task.padEnd(13)} ${j.level.padEnd(8)} seed ${j.seed}: ${r.verdict}, ${r.score}/100, ${r.efficiency.actions} actions (reference ${r.efficiency.reference}), obstacles ${r.obstacles.length}${errors.length ? `, page errors: ${errors.join('; ')}` : ''}`);
-    if (r.verdict !== 'pass') console.log('     wrong:', r.items.filter((i) => !i.ok).map((i) => `${i.label}: expected ${i.expected}, got ${i.got}`), r.violations);
-  } catch (e) {
-    failed++;
-    console.log(`FAIL ${j.task} ${j.level} seed ${j.seed}: ${e.message.split('\n')[0]}`);
-    await page.screenshot({ path: `harness/out/fail-${j.task}-${j.level}-${j.seed}.png` }).catch(() => {});
-  }
-  await page.close();
-}));
-await browser.close();
-process.exit(failed ? 1 : 0);

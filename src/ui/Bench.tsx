@@ -18,6 +18,14 @@ export function Bench({ route }: { route: RunRoute }) {
   const level = LEVELS.find((l) => l.id === cfg.level)!;
   const policy = POLICIES.find((p) => p.id === route.bot);
   const [confirm, setConfirm] = useState(false);
+  // The engine clock only moves when something happens, so people get a wall clock of their own.
+  const [wall, setWall] = useState(0);
+  useEffect(() => {
+    if (route.bot || s.done) return;
+    const t0 = performance.now();
+    const id = window.setInterval(() => setWall(performance.now() - t0), 1000);
+    return () => window.clearInterval(id);
+  }, [route.bot, s.done]);
 
   // What a harness reads: the brief while the run is live, the scorecard once it is over. Never the answers.
   useEffect(() => {
@@ -56,7 +64,7 @@ export function Bench({ route }: { route: RunRoute }) {
         </section>
         {!s.done && (
           <section className="rail-end">
-            <p className="timer" aria-live="off">{clock(s.now)} elapsed, {live.frames.filter((f) => f.ev.who === 'agent').length} actions</p>
+            <p className="timer" aria-live="off">{clock(route.bot ? s.now : wall)} elapsed, {live.frames.filter((f) => f.ev.who === 'agent').length} actions</p>
             {!route.bot && (confirm ? (
               <div className="confirm">
                 <p>End the run and score it?</p>

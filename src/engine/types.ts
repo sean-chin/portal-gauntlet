@@ -16,6 +16,7 @@ export interface Friction {
   idleSec: number;
   mathDeductible: boolean;
   decoy: boolean;
+  history: boolean;
   testIds: boolean;
 }
 
@@ -39,6 +40,8 @@ export interface Claim {
   no: string; patient: string; mrn: string; dos: string; billed: number;
   status: 'Paid' | 'Denied' | 'In process'; paid: number; carc: string; carcText: string;
   mine: boolean;
+  /** Oldest first. The last line is where the claim stands today. */
+  history: { date: string; status: Claim['status']; paid: number; carc: string }[];
 }
 export interface FieldDef { key: string; label: string; type: 'text' | 'select' | 'check'; options?: string[] }
 export interface ScoreItem { key: string; label: string; expected: string; kind: 'text' | 'money' | 'date' | 'blank'; where: 'ehr' | 'portal'; record?: string }

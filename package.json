@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test": "vitest run",
-    "e2e": "node harness/reference-run.mjs"
+    "e2e": "node harness/run.mjs",
+    "bench": "node harness/run.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.1.0",

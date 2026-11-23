@@ -93,9 +93,14 @@ export function Landing() {
   return (
     <div className="home">
       <header className="hero">
-        <nav className="top"><a href="#/report">Report</a><a href="#agent-h">Run your own agent</a><a href="#score-h">Scoring</a></nav>
-        <h1>Portal Gauntlet</h1>
-        <p className="lede">A practice range for agents that do hospital admin work. A fake EHR, a fake payer portal that misbehaves like real ones, and a scorecard after every run that shows what went wrong.</p>
+        <nav className="top">
+          <a className="mark" href="#/">Portal Gauntlet</a>
+          <span><a href="#/report">Report</a><a href="#agent-h">Run your own agent</a><a href="#score-h">Scoring</a></span>
+        </nav>
+        <div className="hero-copy">
+          <h1>Test your hospital admin agent on a portal that fights back.</h1>
+          <p className="lede">A fake EHR, a fake payer portal that misbehaves like real ones, and a scorecard after every run that shows what went wrong and where.</p>
+        </div>
       </header>
 
       <Demo />

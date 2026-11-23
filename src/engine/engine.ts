@@ -21,7 +21,9 @@ const NAMES: Record<string, string> = {
   dedRemaining: 'deductible remaining', termDate: 'termination date', ref: 'payer reference', paRef: 'authorization reference', paStatus: 'authorization status',
   paid: 'amount paid', carc: 'denial code', action: 'next action',
 };
-const setText = (key: string, value: string) => (key === 'urgent' ? (value ? 'Ticked the expedited box' : 'Cleared the expedited box') : `Set ${NAMES[key] ?? key} to "${value}"`);
+const setText = (key: string, value: string) => (/^q\d$/.test(key) ? `Answered clinical question ${key.slice(1)} with "${value}"` : key === 'urgent' ? (value ? 'Ticked the expedited box' : 'Cleared the expedited box') : `Set ${NAMES[key] ?? key} to "${value}"`);
+const STEPS = (w: World) => (w.cfg.friction.clinical ? 5 : 4);
+export const paSteps = STEPS;
 
 const MODAL_NAME: Record<ModalKind, string> = {
   notice: 'Notice after sign-in', survey: 'Survey pop-up', expiring: 'Session about to expire', withdraw: 'Withdraw confirmation',
@@ -174,7 +176,7 @@ export function step(w: World, s0: State, a: Action, at: number): Out {
     p = { ...p, form: { ...p.form, [a.key]: a.value }, lastSetKey: a.key };
     did('portal', setText(a.key, a.value));
   } else if (a.type === 'payer.back') {
-    const to = ({ eligDetail: 'elig', eligResults: 'elig', paResults: 'pa1', pa2: 'pa1', pa3: 'pa2', paReview: 'pa3', claimDetail: 'claims' } as Record<string, PayerState['screen']>)[p.screen];
+    const to = ({ eligDetail: 'elig', eligResults: 'elig', paResults: 'pa1', pa2: 'pa1', pa3: 'pa2', paQ: 'pa3', paReview: f.clinical ? 'paQ' : 'pa3', claimDetail: 'claims' } as Record<string, PayerState['screen']>)[p.screen];
     if (!to) return block('Pressed back where there was nothing to go back to');
     p = { ...p, screen: to, error: '' };
     did('portal', 'Went back a step');
@@ -220,6 +222,10 @@ export function step(w: World, s0: State, a: Action, at: number): Out {
     } else if (p.screen === 'pa3') {
       if (!/^\d{10}$/.test((form.npi ?? '').trim())) fail('The NPI must be ten digits.');
       else if (!(form.provider ?? '').trim()) fail('Enter the ordering provider.');
+      else if (f.clinical) { p = { ...p, screen: 'paQ', error: '' }; did('portal', 'Continued to the clinical questions'); }
+      else { p = { ...p, screen: 'paReview', error: '' }; did('portal', 'Continued to the review step'); }
+    } else if (p.screen === 'paQ') {
+      if (w.clinical!.questions.some((q) => form[q.key] !== 'Yes' && form[q.key] !== 'No')) fail('Answer every question.');
       else { p = { ...p, screen: 'paReview', error: '' }; did('portal', 'Continued to the review step'); }
     } else if (p.screen === 'paReview') {
       did('portal', 'Submitted the authorization request');

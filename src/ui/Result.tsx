@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { TASKS } from '../engine/world';
 import type { RunRoute } from '../route';
-import type { Live } from '../useRun';
+import type { Result } from '../engine/score';
+import type { Frame, World } from '../engine/types';
+import { encodeLog } from '../replay';
+import { replayHref } from '../route';
+import type { Logged } from '../useRun';
 import { Ehr } from './Ehr';
 import { Portal } from './Portal';
 import { Timeline } from './Timeline';
@@ -13,9 +17,13 @@ const VERDICT = {
 } as const;
 const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
-export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
-  const r = live.result!;
-  const frames = live.frames;
+export function ResultView({ world, frames, result: r, route, log, by }: { world: World; frames: Frame[]; result: Result; route: RunRoute; log: () => Logged[]; by: string }) {
+  const [copied, setCopied] = useState('');
+  const share = async () => {
+    const url = `${window.location.origin}${window.location.pathname}${replayHref(route, await encodeLog(log()), by)}`;
+    try { await navigator.clipboard.writeText(url); setCopied('Link copied'); } catch { window.location.hash = url.slice(url.indexOf('#')); setCopied('Link is in the address bar'); }
+    window.setTimeout(() => setCopied(''), 2500);
+  };
   // Open the replay where the trouble started, if there was any.
   const firstBad = frames.findIndex((f) => !f.ev.ok);
   const [at, setAt] = useState(r.causes[0] ? Math.min(r.causes[0].frame, Math.max(0, frames.length - 1)) : firstBad >= 0 ? firstBad : 0);
@@ -55,7 +63,10 @@ export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
           <p>{v.line}</p>
           <p className="muted">{task.name}: {r.outcome.correct} of {r.outcome.total} fields right, {r.efficiency.actions} actions against a reference of {r.efficiency.reference}, {secs(r.durationMs)} on the clock{r.blocked ? `, ${r.blocked} ${r.blocked === 1 ? 'action' : 'actions'} that hit nothing` : ''}.</p>
         </div>
-        <button type="button" className="btn" onClick={download}>Download run as JSON</button>
+        <div className="verdict-actions">
+          <button type="button" className="btn solid" data-testid="share" onClick={share}>{copied || 'Copy replay link'}</button>
+          <button type="button" className="btn" onClick={download}>Download as JSON</button>
+        </div>
       </header>
 
       {r.violations.length > 0 && (
@@ -138,8 +149,8 @@ export function ResultView({ live, route }: { live: Live; route: RunRoute }) {
                 <span className="muted">Step {at + 1} of {frames.length}</span>
               </div>
               <div className="screen frozen">
-                {frame.state.tab === 'ehr' && <Ehr world={live.world} state={frame.state} dispatch={noop} frozen />}
-                {frame.state.tab === 'payer' && <Portal world={live.world} state={frame.state} dispatch={noop} frozen />}
+                {frame.state.tab === 'ehr' && <Ehr world={world} state={frame.state} dispatch={noop} frozen />}
+                {frame.state.tab === 'payer' && <Portal world={world} state={frame.state} dispatch={noop} frozen />}
                 {frame.state.tab === 'auth' && <div className="auth"><h2>Authenticator</h2><p className="code">{frame.state.payer.mfaCode || 'No code waiting'}</p></div>}
               </div>
             </div>

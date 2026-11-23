@@ -19,7 +19,9 @@ const tasks = arg('task', 'eligibility,prior-auth,claim-status').split(',');
 const seeds = arg('seed', '7').split(',').map(Number);
 const agentPath = arg('agent', './harness/agents/reference.mjs');
 const parallel = Number(arg('parallel', '6'));
+const mix = arg('mix', '');   // with --level custom: the obstacles to switch on, comma separated
 const timeout = Number(arg('timeout', '180')) * 1000;
+const agentName = agentPath.split('/').pop().replace(/\.m?js$/, '');
 const { agent } = await import(pathToFileURL(resolve(agentPath)).href);
 
 const jobs = [];
@@ -35,14 +37,16 @@ async function one(j) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   const row = { ...j, verdict: 'error', score: 0, error: '' };
   try {
-    await page.goto(`${BASE}/#/run?task=${j.task}&level=${j.level}&seed=${j.seed}`);
+    await page.goto(`${BASE}/#/run?task=${j.task}&level=${j.level}&seed=${j.seed}${mix ? `&fr=${mix}` : ''}`);
     const task = await page.evaluate(() => window.gauntlet.task);
     await Promise.race([agent(page, task), new Promise((_, no) => setTimeout(() => no(new Error('Timed out')), timeout))]);
     await page.getByTestId('finish').click();
     await page.getByTestId('finish-confirm').click();
     const r = await page.evaluate(() => window.gauntlet.result());
     Object.assign(row, { verdict: r.verdict, score: r.score, fields: `${r.outcome.correct}/${r.outcome.total}`, actions: r.efficiency.actions, reference: r.efficiency.reference,
-      obstacles: r.obstacles.length, blocked: r.blocked, violations: r.violations, wrong: r.items.filter((i) => !i.ok).map((i) => `${i.label}: expected ${i.expected}, got ${i.got || '(blank)'}`) });
+      obstacles: r.obstacles.length, blocked: r.blocked, violations: r.violations, wrong: r.items.filter((i) => !i.ok).map((i) => `${i.label}: expected ${i.expected}, got ${i.got || '(blank)'}`),
+      causes: r.causes.map((c) => c.id), seconds: Math.round(r.durationMs / 1000),
+      replay: await page.evaluate((by) => window.gauntlet.replayUrl(by), agentName) });
   } catch (e) {
     row.error = e.message.split('\n')[0];
     await page.screenshot({ path: `harness/out/error-${j.task}-${j.level}-${j.seed}.png` }).catch(() => {});
@@ -53,6 +57,7 @@ async function one(j) {
   console.log(`${tag} ${j.task.padEnd(13)} ${j.level.padEnd(8)} seed ${String(j.seed).padEnd(4)} ${row.verdict.padEnd(8)} ${String(row.score).padStart(3)}/100` +
     (row.error ? `  ${row.error}` : `  ${row.actions} actions (reference ${row.reference}), ${row.obstacles} obstacles`) + (errors.length ? `  page errors: ${errors.join('; ')}` : ''));
   for (const w of [...(row.wrong ?? []), ...(row.violations ?? [])]) console.log(`       ${w}`);
+  if (row.verdict !== 'pass' && row.replay) console.log(`       replay: ${row.replay}`);
   await page.close();
 }
 
@@ -62,7 +67,7 @@ await browser.close();
 
 const by = (level) => rows.filter((r) => r.level === level);
 const summary = {
-  base: BASE, agent: agentPath, runs: rows.length,
+  base: BASE, agent: agentName, runs: rows.length,
   passRate: rows.filter((r) => r.verdict === 'pass').length / rows.length,
   unsafe: rows.filter((r) => r.verdict === 'unsafe').length,
   byLevel: Object.fromEntries(levels.map((l) => [l, { runs: by(l).length, pass: by(l).filter((r) => r.verdict === 'pass').length, meanScore: Math.round(by(l).reduce((a, r) => a + r.score, 0) / Math.max(1, by(l).length)) }])),

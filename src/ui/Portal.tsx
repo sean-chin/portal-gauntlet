@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { paSteps } from '../engine/engine';
 import { us } from '../engine/dates';
 import { hash } from '../engine/rng';
 import type { Action, FieldDef, State, VisitType, World } from '../engine/types';
@@ -81,7 +82,7 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
   } else if (p.screen === 'elig' || p.screen === 'pa1') {
     body = (
       <div className="pp-card">
-        <h2>{p.screen === 'elig' ? 'Eligibility and benefits inquiry' : 'Prior authorization request, step 1 of 4: member'}</h2>
+        <h2>{p.screen === 'elig' ? 'Eligibility and benefits inquiry' : `Prior authorization request, step 1 of ${paSteps(w)}: member`}</h2>
         {err}
         <div className="pp-form">{form('lookup')}</div>
         {btn('Search', 'submit', submit, 'pp-primary')}
@@ -140,7 +141,7 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
   } else if (p.screen === 'pa2' || p.screen === 'pa3') {
     body = (
       <div className="pp-card">
-        <h2>Prior authorization request, step {p.screen === 'pa2' ? '2 of 4: service' : '3 of 4: provider'}</h2>
+        <h2>Prior authorization request, step {p.screen === 'pa2' ? 2 : 3} of {paSteps(w)}: {p.screen === 'pa2' ? 'service' : 'provider'}</h2>
         {member && <p className="pp-for">For {member.last}, {member.first}, born {us(member.dob)}, {member.memberId}-{member.suffix}</p>}
         {err}
         <div className="pp-form">{form(p.screen)}</div>
@@ -153,13 +154,27 @@ export function Portal({ world: w, state: s, dispatch, frozen }: P) {
         <div className="pp-row">{btn('Back', 'back', () => dispatch({ type: 'payer.back' }))}{btn('Continue', 'submit', submit, 'pp-primary')}</div>
       </div>
     );
+  } else if (p.screen === 'paQ') {
+    body = (
+      <div className="pp-card">
+        <h2>Prior authorization request, step 4 of 5: clinical questions</h2>
+        {member && <p className="pp-for">For {member.last}, {member.first}, born {us(member.dob)}, {member.memberId}-{member.suffix}</p>}
+        <p>Answer from the member's medical record. Answers are attestations and may be audited.</p>
+        {err}
+        <div className="pp-qs">
+          {w.clinical!.questions.map((q) => field({ key: q.key, label: q.text, type: 'select', options: ['Yes', 'No'] }))}
+        </div>
+        <div className="pp-row">{btn('Back', 'back', () => dispatch({ type: 'payer.back' }))}{btn('Continue', 'submit', submit, 'pp-primary')}</div>
+      </div>
+    );
   } else if (p.screen === 'paReview') {
     const rows: [string, string][] = [['Member', member ? `${member.last}, ${member.first} (${member.memberId}-${member.suffix})` : ''], ['Procedure code', p.form.cpt ?? ''], ['Diagnosis code', p.form.icd ?? ''],
       ['Date of service', p.form.dos ?? ''], ['Place of service', p.form.pos ?? ''], ['Units', p.form.units ?? ''], ['Expedited', p.form.urgent === 'yes' ? 'Yes' : 'No'],
-      ['Ordering provider', `${p.form.provider ?? ''}, NPI ${p.form.npi ?? ''}`]];
+      ['Ordering provider', `${p.form.provider ?? ''}, NPI ${p.form.npi ?? ''}`],
+      ...(f.clinical ? w.clinical!.questions.map((q): [string, string] => [q.short, p.form[q.key] ?? '']) : [])];
     body = (
       <div className="pp-card">
-        <h2>Prior authorization request, step 4 of 4: review</h2>
+        <h2>Prior authorization request, step {paSteps(w)} of {paSteps(w)}: review</h2>
         <dl className="pp-dl">{rows.map(([k, v]) => <div key={k} className="pp-pair"><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
         <div className="pp-row">{btn('Back', 'back', () => dispatch({ type: 'payer.back' }))}{btn('Submit request', 'submit', submit, 'pp-primary')}</div>
       </div>

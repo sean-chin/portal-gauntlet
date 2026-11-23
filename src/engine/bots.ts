@@ -71,7 +71,10 @@ function script(w: World): Step[] {
     return [() => ({ type: 'ehr.open', id: target.id }), toPortal, ...signIn, () => ({ type: 'payer.nav', screen: 'pa1' }), ...lookup,
       fill('pa2', 'cpt', () => o.cpt), fill('pa2', 'icd', () => o.icd), fill('pa2', 'dos', (c) => date(c, o.dos)), fill('pa2', 'pos', () => o.pos), fill('pa2', 'units', () => String(o.units)),
       () => (o.urgent ? { type: 'payer.set', key: 'urgent', value: 'yes' } : null), submit,
-      fill('pa3', 'npi', () => o.npi), fill('pa3', 'provider', () => o.provider), submit, submit,
+      fill('pa3', 'npi', () => o.npi), fill('pa3', 'provider', () => o.provider), submit,
+      // A script replays the answers of the case it was recorded on. Only an operator that reads the notes gets them right.
+      ...(f.clinical ? [...w.clinical!.questions.map((q): Step => (c) => ({ type: 'payer.set', key: q.key, value: c.caps.math ? q.answer : q.stronger })), submit] : []),
+      submit,
       (c) => { if (c.s.payer.screen === 'paDone') c.mem.read.pa = { paRef: w.pa!.ref, paStatus: w.pa!.status }; return null; },
       leavePortal, ...write(target.id, (c) => c.mem.read.pa ?? {}), finish];
   }
@@ -124,7 +127,7 @@ export function* play(w: World, policy: PolicyId): Generator<{ at: number; actio
 
 const refCache = new Map<string, number>();
 export function referenceActions(cfg: Cfg): number {
-  const key = `${cfg.task}|${cfg.seed}|${cfg.level}`;
+  const key = `${cfg.task}|${cfg.seed}|${cfg.level}|${JSON.stringify(cfg.friction)}`;
   if (!refCache.has(key)) refCache.set(key, simulate(cfg, 'reference', true).frames.filter((f) => f.ev.who === 'agent').length);
   return refCache.get(key)!;
 }

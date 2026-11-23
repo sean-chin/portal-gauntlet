@@ -44,7 +44,20 @@ legend { padding: 0; font-weight: 600; margin-bottom: .5rem; }
 .seed { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
 .seed input, .go select { height: 44px; padding: 0 .6rem; border: 1px solid var(--ink-2); border-radius: 4px; font: inherit; background: #fff; }
 .seed input { width: 6.5rem; }
+.mix { display: grid; grid-template-columns: 1fr 1fr; gap: .35rem 1rem; padding: .2rem .2rem .4rem 2.3rem; font-size: .9rem; color: var(--ink-2); }
+.mix label { display: flex; gap: .5rem; align-items: baseline; cursor: pointer; }
+.mix input { accent-color: var(--ink); flex: none; }
 .scroll { overflow-x: auto; }
+.ones { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); margin: 1rem 0 .75rem; min-width: 620px; font-size: .95rem; }
+.ones th, .ones td { border-bottom: 1px solid var(--line); padding: .5rem 1rem; text-align: left; vertical-align: middle; }
+.ones thead th { font-weight: 600; background: #f7f8f9; }
+.ones th[scope=row] { font-weight: 400; width: 40%; }
+.ones td a { display: grid; grid-template-columns: minmax(60px, 1fr) 3rem auto; gap: .7rem; align-items: center; text-decoration: none; }
+.ones td a:hover b { text-decoration: underline; }
+.ones .bar { margin: 0; }
+.ones b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.ones small { color: var(--stop); white-space: nowrap; }
+.ones td.wait { color: var(--muted); font-size: .85rem; }
 .matrix { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); margin: 1rem 0 .75rem; min-width: 640px; }
 .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: .9rem 1rem; text-align: left; vertical-align: top; }
 .matrix thead th { font-weight: 600; background: #f7f8f9; }
@@ -149,6 +162,8 @@ legend { padding: 0; font-weight: 600; margin-bottom: .5rem; }
 .verdict.pass { border-left-color: var(--go); }
 .verdict.unsafe { border-left-color: var(--stop); }
 .verdict > div:nth-child(2) { flex: 1 1 20rem; }
+.verdict-actions { display: flex; flex-direction: column; gap: .5rem; }
+.verdict-actions .btn { min-width: 11.5rem; }
 .verdict h2 { font-size: 1.6rem; }
 .verdict p { margin-bottom: .25rem; }
 .score { text-align: center; min-width: 6.5rem; }
@@ -218,6 +233,8 @@ legend { padding: 0; font-weight: 600; margin-bottom: .5rem; }
 .ehr-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 .ehr-saved { color: #1d6b47; font-weight: bold; }
 .ehr-note { color: #52666f; }
+.ehr-box ul { margin: 0; padding-left: 18px; }
+.ehr-box p { margin: 0 0 4px; }
 
 /* Fake payer portal: early-2010s enterprise blue */
 .pp { font: 12px/1.45 Verdana, Geneva, Arial, sans-serif; color: #222; min-width: 720px; min-height: 560px; background: #eef2f7; position: relative; display: flex; flex-direction: column; }
@@ -234,6 +251,8 @@ legend { padding: 0; font-weight: 600; margin-bottom: .5rem; }
 .pp h2 { font-size: 15px; color: #173f73; margin: 0 0 10px; }
 .pp h3 { font-size: 13px; color: #173f73; margin: 14px 0 6px; }
 .pp-form { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 8px 18px; margin-bottom: 12px; }
+.pp-qs { display: grid; gap: 10px; max-width: 520px; margin-bottom: 12px; }
+.pp-qs select { max-width: 120px; }
 .pp-login .pp-field { display: block; margin-bottom: 8px; }
 .pp-field span { display: block; font-weight: bold; margin-bottom: 2px; }
 .pp-field em { font-weight: normal; font-style: normal; color: #5a6675; }

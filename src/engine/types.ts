@@ -1,5 +1,5 @@
 export type TaskId = 'eligibility' | 'prior-auth' | 'claim-status';
-export type Level = 'calm' | 'typical' | 'hostile';
+export type Level = 'calm' | 'typical' | 'hostile' | 'custom';
 export type VisitType = 'pcp' | 'specialist' | 'urgent' | 'er';
 
 export interface Friction {
@@ -17,6 +17,7 @@ export interface Friction {
   mathDeductible: boolean;
   decoy: boolean;
   history: boolean;
+  clinical: boolean;
   testIds: boolean;
 }
 
@@ -46,16 +47,19 @@ export interface Claim {
 export interface FieldDef { key: string; label: string; type: 'text' | 'select' | 'check'; options?: string[] }
 export interface ScoreItem { key: string; label: string; expected: string; kind: 'text' | 'money' | 'date' | 'blank'; where: 'ehr' | 'portal'; record?: string }
 
+export interface Question { key: string; text: string; short: string; answer: 'Yes' | 'No'; stronger: 'Yes' | 'No' }
+export interface Clinical { notes: string[]; author: string; questions: Question[] }
+
 export interface World {
   cfg: Cfg; payerName: string; creds: { user: string; pass: string };
   patients: Patient[]; targetId: string; members: Member[];
-  order: Order | null; pa: { ref: string; status: string } | null;
+  order: Order | null; clinical: Clinical | null; pa: { ref: string; status: string } | null;
   claims: Claim[]; brief: string[]; items: ScoreItem[];
   forcedAt: number;
 }
 
 export type PayerScreen = 'login' | 'mfa' | 'home' | 'elig' | 'eligResults' | 'eligDetail'
-  | 'pa1' | 'paResults' | 'pa2' | 'pa3' | 'paReview' | 'paDone' | 'claims' | 'claimDetail';
+  | 'pa1' | 'paResults' | 'pa2' | 'pa3' | 'paQ' | 'paReview' | 'paDone' | 'claims' | 'claimDetail';
 export type ModalKind = 'notice' | 'survey' | 'expiring' | 'withdraw';
 
 export interface PayerState {

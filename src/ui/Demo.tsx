@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { POLICIES } from '../engine/bots';
-import { LEVELS, makeCfg, TASKS } from '../engine/world';
+import { levelName, makeCfg, TASKS } from '../engine/world';
 import { runHref, type RunRoute } from '../route';
 import { useRun } from '../useRun';
 import { Ehr } from './Ehr';
@@ -29,7 +29,7 @@ function Reel({ route, onDone }: { route: RunRoute; onDone: () => void }) {
   const noop = () => undefined;
   const who = POLICIES.find((p) => p.id === route.bot)!.name;
   const what = TASKS.find((t) => t.id === route.task)!.name.toLowerCase();
-  const how = LEVELS.find((l) => l.id === route.level)!.name.toLowerCase();
+  const how = levelName(route.level).toLowerCase();
   return (
     <figure className="demo">
       <figcaption>

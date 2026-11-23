@@ -114,6 +114,21 @@ export async function agent(page, task) {
     const o = await pairs(page.getByTestId('ehr-order'));
     const order = { cpt: o.Procedure.split(',')[0], icd: o.Diagnosis.split(',')[0], dos: toUs(o['Planned date']), pos: o['Place of service'], units: o.Units,
       urgent: o.Priority === 'Urgent', provider: o['Ordering provider'].split(', NPI ')[0], npi: o['Ordering provider'].split(', NPI ')[1] };
+    // The payer's clinical questions are answered from the notes in the chart, never from what would help the request.
+    const notes = (await page.getByTestId('ehr-notes').count()) ? await page.getByTestId('ehr-notes').innerText() : '';
+    const today = new Date(await page.getByTestId('ehr-today').innerText());
+    const answer = (question) => {
+      if (/past 12 months/i.test(question)) {
+        const m = /performed on ([A-Z][a-z]{2} \d{1,2}, \d{4})/.exec(notes);
+        return m && (today - new Date(m[1])) / 864e5 <= 365 ? 'Yes' : 'No';
+      }
+      if (/six weeks/i.test(question)) {
+        const m = /began about (\d+) (day|week|month)/.exec(notes);
+        return m && Number(m[1]) * { day: 1, week: 7, month: 30 }[m[2]] >= 42 ? 'Yes' : 'No';
+      }
+      if (/first-line/i.test(question)) return /First-line treatment: completed, no improvement/.test(notes) ? 'Yes' : 'No';
+      throw new Error(`No rule for the question: ${question}`);
+    };
     const got = await onPortal(async () => {
       await press('Prior authorization');
       await findMember(patient);
@@ -123,6 +138,11 @@ export async function agent(page, task) {
       await press('Continue');
       await fill('npi', order.npi); await fill('provider', order.provider);
       await press('Continue');
+      if (await portal.getByRole('heading', { name: /clinical questions/ }).isVisible()) {
+        const questions = await portal.locator('.pp-qs label > span').allTextContents();
+        for (const q of questions) await act(() => portal.getByLabel(q).selectOption(answer(q)));
+        await press('Continue');
+      }
       await press('Submit request');
       const d = await pairs(portal);
       return { paRef: d['Authorization reference'], paStatus: d.Status };

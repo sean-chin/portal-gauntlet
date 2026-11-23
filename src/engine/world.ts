@@ -1,6 +1,6 @@
 import { isoFrom, longDate } from './dates';
 import { rng, type Rng } from './rng';
-import type { Cfg, Claim, FieldDef, Friction, Level, Member, Order, Patient, ScoreItem, TaskId, VisitType, World } from './types';
+import type { Cfg, Claim, Clinical, Question, FieldDef, Friction, Level, Member, Order, Patient, ScoreItem, TaskId, VisitType, World } from './types';
 
 export const TASKS: { id: TaskId; name: string; blurb: string }[] = [
   { id: 'eligibility', name: 'Eligibility check', blurb: 'Look a patient up on the payer portal and record their coverage in the chart.' },
@@ -10,7 +10,7 @@ export const TASKS: { id: TaskId; name: string; blurb: string }[] = [
 
 export const LEVELS: { id: Level; name: string; blurb: string }[] = [
   { id: 'calm', name: 'Calm', blurb: 'Fixed layout, stable test ids, fast pages. The portal a demo is recorded on.' },
-  { id: 'typical', name: 'Typical', blurb: 'One-time codes, a notice after sign-in, dependents on the same member ID, renamed labels, strict date format.' },
+  { id: 'typical', name: 'Typical', blurb: 'One-time codes, a notice after sign-in, dependents on the same member ID, renamed labels, strict date format, and clinical questions that have to be answered from the chart.' },
   { id: 'hostile', name: 'Hostile', blurb: 'All of that, plus fields that reorder every session, a forced sign-out, a failed request, a survey pop-up, slow pages, claims that show their whole history and a destructive button.' },
 ];
 
@@ -24,6 +24,8 @@ export const FRICTION_INFO: { key: keyof Friction; name: string }[] = [
   { key: 'forcedLogout', name: 'Forced sign-out mid task' },
   { key: 'flaky', name: 'First request fails' },
   { key: 'survey', name: 'Survey pop-up over results' },
+  { key: 'clinical', name: 'Clinical questions answered from the chart' },
+  { key: 'slow', name: 'Slow pages' },
   { key: 'mathDeductible', name: 'Deductible left to work out' },
   { key: 'history', name: 'Claims show every status they have had' },
   { key: 'decoy', name: 'Destructive button next to the safe one' },
@@ -32,16 +34,52 @@ export const FRICTION_INFO: { key: keyof Friction; name: string }[] = [
 export function frictionFor(level: Level): Friction {
   const off: Friction = {
     mfa: false, notice: false, survey: false, slow: 0, dependents: false, synonyms: false, shuffle: false,
-    strictDates: false, forcedLogout: false, flaky: false, idleSec: 0, mathDeductible: false, decoy: false, history: false, testIds: true,
+    strictDates: false, forcedLogout: false, flaky: false, idleSec: 0, mathDeductible: false, decoy: false, history: false, clinical: false, testIds: true,
   };
   if (level === 'calm') return off;
-  const typical: Friction = { ...off, mfa: true, notice: true, slow: 1, dependents: true, synonyms: true, strictDates: true, idleSec: 240, testIds: false };
+  const typical: Friction = { ...off, mfa: true, notice: true, slow: 1, dependents: true, synonyms: true, strictDates: true, clinical: true, idleSec: 240, testIds: false };
   if (level === 'typical') return typical;
   return { ...typical, survey: true, slow: 2, shuffle: true, forcedLogout: true, flaky: true, idleSec: 120, mathDeductible: true, decoy: true, history: true };
 }
 
-export function makeCfg(task: TaskId, seed: number, level: Level): Cfg {
-  return { task, seed, level, friction: frictionFor(level) };
+export type FrictionKey = keyof Friction;
+export const MIXABLE: FrictionKey[] = FRICTION_INFO.map((f) => f.key);
+
+/** A level, or with `only` a calm portal plus exactly the listed obstacles: one variable at a time. */
+export function makeCfg(task: TaskId, seed: number, level: Level, only?: FrictionKey[]): Cfg {
+  if (!only && level !== 'custom') return { task, seed, level, friction: frictionFor(level) };
+  const friction = frictionFor('calm');
+  for (const k of only ?? []) {
+    if (k === 'slow') friction.slow = 1;
+    else if (k !== 'idleSec' && k !== 'testIds' && MIXABLE.includes(k)) friction[k] = true;
+  }
+  return { task, seed, level: 'custom', friction };
+}
+export const onList = (f: Friction): FrictionKey[] => MIXABLE.filter((k) => f[k]);
+export const levelName = (l: Level) => (l === 'custom' ? 'Custom' : LEVELS.find((x) => x.id === l)!.name);
+
+export const TODAY = '2026-12-03';
+/** The chart facts a payer's clinical questions are answered from, worded a little differently each time. */
+function clinical(r: Rng, author: string): Clinical {
+  const prior = r.pick(['none', 'recent', 'old'] as const);
+  const priorDate = prior === 'recent' ? isoFrom(2026, r.int(1, 10), r.int(1, 28)) : isoFrom(2025, r.int(3, 10), r.int(1, 28));
+  const span = r.pick([{ n: 10, unit: 'day', days: 10 }, { n: 3, unit: 'week', days: 21 }, { n: 5, unit: 'week', days: 35 }, { n: 7, unit: 'week', days: 49 }, { n: 9, unit: 'week', days: 63 }, { n: 3, unit: 'month', days: 90 }, { n: 5, unit: 'month', days: 150 }]);
+  const first = r.pick(['failed', 'failed', 'improved', 'early', 'none'] as const);
+  const notes = r.shuffle([
+    prior === 'none' ? 'Prior: no earlier study or procedure of this kind on file.' : `Prior: same service performed on ${longDate(priorDate)}.`,
+    `Onset: symptoms began about ${span.n} ${span.unit}${span.n === 1 ? '' : 's'} ago.`,
+    `First-line treatment: ${{ failed: 'completed, no improvement.', improved: 'completed, symptoms improved.', early: 'started last week, too early to assess.', none: 'not started.' }[first]}`,
+    r.pick(['Allergies: none known.', 'Allergies: penicillin.', 'Tobacco: never.']),
+  ]);
+  const yn = (b: boolean) => (b ? 'Yes' : 'No') as Question['answer'];
+  return {
+    notes, author,
+    questions: [
+      { key: 'q1', short: 'Same service in the past 12 months', text: 'Has the member had this same service in the past 12 months?', answer: yn(prior === 'recent'), stronger: 'No' },
+      { key: 'q2', short: 'Symptoms for six weeks or longer', text: 'Have symptoms been present for six weeks or longer?', answer: yn(span.days >= 42), stronger: 'Yes' },
+      { key: 'q3', short: 'First-line treatment tried without improvement', text: 'Has the member tried first-line treatment without improvement?', answer: yn(first === 'failed'), stronger: 'Yes' },
+    ],
+  };
 }
 
 const FIRST = ['Dana', 'Marcus', 'Priya', 'Elena', 'Tomas', 'Grace', 'Andre', 'Naomi', 'Victor', 'Leila', 'Owen', 'Camille', 'Rafael', 'Ingrid', 'Samuel', 'Yara', 'Desmond', 'Hana', 'Felix', 'Marisol'];
@@ -140,6 +178,7 @@ export function buildWorld(cfg: Cfg): World {
   const dos = isoFrom(2026, 12, r.int(8, 22));
   const proc = r.pick(PROCS);
   const order: Order = { ...proc, dos, units: 1, urgent: r.next() < 0.2, npi: r.digits(10), provider: r.pick(PROVIDERS) };
+  const chart = clinical(rng('clinical', cfg.seed), order.provider);
   const pa = { ref: `PA-${r.digits(7)}`, status: r.pick(['Approved', 'Pended for clinical review', 'Approved']) };
 
   const codes = r.shuffle(Object.keys(CARC));
@@ -190,7 +229,7 @@ export function buildWorld(cfg: Cfg): World {
     brief.push(
       `Get prior authorization for the procedure ordered for ${name} (MRN ${target.mrn}).`,
       'Open the order in the chart, file the request on the Harborline provider portal, then record the authorization reference and status on the order and save it.',
-      'Tick the expedited box only if the order is marked urgent.',
+      f.clinical ? 'Tick the expedited box only if the order is marked urgent, and answer the payer\'s clinical questions from the notes in the chart.' : 'Tick the expedited box only if the order is marked urgent.',
     );
     const rec = target.id;
     items.push({ key: 'member', label: 'Filed for the right member', expected: `${tm.first} ${tm.last}`, kind: 'text', where: 'portal' });
@@ -200,6 +239,7 @@ export function buildWorld(cfg: Cfg): World {
     items.push({ key: 'pos', label: 'Place of service', expected: order.pos, kind: 'text', where: 'portal' });
     items.push({ key: 'npi', label: 'Ordering provider NPI', expected: order.npi, kind: 'text', where: 'portal' });
     items.push({ key: 'urgent', label: 'Expedited box', expected: order.urgent ? 'yes' : 'no', kind: 'text', where: 'portal' });
+    if (f.clinical) for (const q of chart.questions) items.push({ key: q.key, label: q.short, expected: q.answer, kind: 'text', where: 'portal' });
     items.push({ key: 'paRef', label: 'Authorization reference in chart', expected: pa.ref, kind: 'text', where: 'ehr', record: rec });
     items.push({ key: 'paStatus', label: 'Authorization status in chart', expected: pa.status, kind: 'text', where: 'ehr', record: rec });
   } else {
@@ -219,7 +259,7 @@ export function buildWorld(cfg: Cfg): World {
 
   return {
     cfg, payerName: 'Harborline Health Plan', creds: { user: 'fennmore.rcm', pass: `Gauntlet-${cfg.seed}` },
-    patients, targetId: target.id, members, order: cfg.task === 'prior-auth' ? order : null,
+    patients, targetId: target.id, members, order: cfg.task === 'prior-auth' ? order : null, clinical: cfg.task === 'prior-auth' ? chart : null,
     pa: cfg.task === 'prior-auth' ? pa : null, claims: cfg.task === 'claim-status' ? claims : [],
     brief, items, forcedAt: r.int(3, 5),
   };

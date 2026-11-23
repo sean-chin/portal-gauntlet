@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { POLICIES, simulate, type PolicyId } from '../engine/bots';
 import type { Level, TaskId } from '../engine/types';
-import { LEVELS, makeCfg, TASKS } from '../engine/world';
+import { FRICTION_INFO, LEVELS, makeCfg, TASKS, type FrictionKey } from '../engine/world';
 import { runHref } from '../route';
 import { Demo } from './Demo';
 
@@ -30,6 +30,26 @@ function matrix(): Record<PolicyId, Record<Level, Cell>> {
   return out;
 }
 
+interface One { key: FrictionKey; name: string; cells: Record<string, Cell> }
+const ONE_SEEDS = 10;
+/** A calm portal with a single obstacle switched on: what does each one cost on its own? */
+function oneAtATime(f: { key: FrictionKey; name: string }): One {
+  const cells: Record<string, Cell> = {};
+  for (const p of POLICIES) {
+    const cell: Cell = { pass: 0, unsafe: 0, runs: 0, sample: { task: 'prior-auth', seed: 1 } };
+    let sampled = false;
+    for (const t of TASKS) for (let seed = 1; seed <= ONE_SEEDS; seed++) {
+      const r = simulate(makeCfg(t.id, seed, 'custom', [f.key]), p.id).result;
+      cell.runs++;
+      if (r.verdict === 'pass') cell.pass++;
+      else if (!sampled) { cell.sample = { task: t.id, seed }; sampled = true; }
+      if (r.verdict === 'unsafe') cell.unsafe++;
+    }
+    cells[p.id] = cell;
+  }
+  return { ...f, cells };
+}
+
 const SNIPPET = `import { chromium } from 'playwright';
 
 const page = await (await chromium.launch()).newPage();
@@ -53,6 +73,17 @@ export function Landing() {
   const [seed, setSeed] = useState(7);
   const [bot, setBot] = useState<PolicyId>('patched');
   const grid = useMemo(matrix, []);
+  const [mix, setMix] = useState<FrictionKey[]>(['dependents', 'clinical']);
+  const only = level === 'custom' ? mix : undefined;
+  // Worked out a row at a time after the page has painted, so the first screen is never waiting on it.
+  const [ones, setOnes] = useState<One[]>([]);
+  useEffect(() => {
+    let i = 0;
+    let id = 0;
+    const next = () => { if (i >= FRICTION_INFO.length) return; const row = oneAtATime(FRICTION_INFO[i++]); setOnes((o) => [...o, row]); id = window.setTimeout(next, 30); };
+    id = window.setTimeout(next, 600);
+    return () => window.clearTimeout(id);
+  }, []);
   const safeSeed = Number.isFinite(seed) && seed >= 0 ? Math.min(seed, 999999) : 1;
 
   return (
@@ -84,6 +115,17 @@ export function Landing() {
                 <span><b>{l.name}</b>{l.blurb}</span>
               </label>
             ))}
+            <label className={level === 'custom' ? 'opt on' : 'opt'}>
+              <input type="radio" name="level" checked={level === 'custom'} onChange={() => setLevel('custom')} />
+              <span><b>Your own mix</b>A calm portal plus exactly the obstacles you tick, to find the one that breaks an agent.</span>
+            </label>
+            {level === 'custom' && (
+              <div className="mix">
+                {FRICTION_INFO.map((f) => (
+                  <label key={f.key}><input type="checkbox" checked={mix.includes(f.key)} onChange={(e) => setMix((m) => (e.target.checked ? [...m, f.key] : m.filter((k) => k !== f.key)))} />{f.name}</label>
+                ))}
+              </div>
+            )}
           </fieldset>
         </div>
         <div className="go">
@@ -91,12 +133,12 @@ export function Landing() {
             <input type="number" min={0} max={999999} value={seed} onChange={(e) => setSeed(Number.parseInt(e.target.value, 10))} />
           </label>
           <p className="muted">The seed picks the patients, the numbers and where the trouble lands. Same seed, same run.</p>
-          <a className="btn solid" data-testid="start" href={runHref({ task, level, seed: safeSeed, bot: null })}>Do it yourself</a>
+          <a className="btn solid" data-testid="start" href={runHref({ task, level, seed: safeSeed, bot: null, only })}>Do it yourself</a>
           <span className="or">or watch the</span>
           <select aria-label="Scripted operator" value={bot} onChange={(e) => setBot(e.target.value as PolicyId)}>
             {POLICIES.map((p) => <option key={p.id} value={p.id}>{p.name.toLowerCase()}</option>)}
           </select>
-          <a className="btn" href={runHref({ task, level, seed: safeSeed, bot })}>Watch</a>
+          <a className="btn" href={runHref({ task, level, seed: safeSeed, bot, only })}>Watch</a>
         </div>
       </section>
 
@@ -129,6 +171,39 @@ export function Landing() {
           </table>
         </div>
         <p className="muted">Each cell opens one of its runs so you can watch where it went wrong. "Unsafe" means the script did something a hospital would have to undo, such as filing an authorization for the patient's spouse.</p>
+      </section>
+
+      <section aria-labelledby="one-h">
+        <h2 id="one-h">Which obstacle does the damage</h2>
+        <p>The same scripts on a calm portal with one obstacle switched on at a time, {ONE_SEEDS} seeds for each task. This is the view to use on your own agent: when a hostile run fails, it tells you which single behaviour to go and fix.</p>
+        <div className="scroll">
+          <table className="ones">
+            <thead><tr><th>Obstacle, on its own</th>{POLICIES.map((p) => <th key={p.id}>{p.name}</th>)}</tr></thead>
+            <tbody>
+              {FRICTION_INFO.map((f) => {
+                const row = ones.find((o) => o.key === f.key);
+                return (
+                  <tr key={f.key}>
+                    <th scope="row">{f.name}</th>
+                    {POLICIES.map((p) => {
+                      const c = row?.cells[p.id];
+                      if (!c) return <td key={p.id} className="wait">working it out</td>;
+                      const pct = Math.round((100 * c.pass) / c.runs);
+                      return (
+                        <td key={p.id}>
+                          <a href={runHref({ task: c.sample.task, level: 'custom', seed: c.sample.seed, bot: p.id, only: [f.key] })} title="Watch one of these runs">
+                            <span className="bar"><i style={{ width: `${pct}%` }} /></span>
+                            <b>{pct}%</b>{c.unsafe ? <small>{c.unsafe} unsafe</small> : null}
+                          </a>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="two" aria-labelledby="agent-h">

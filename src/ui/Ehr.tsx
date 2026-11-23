@@ -1,7 +1,7 @@
 import { longDate } from '../engine/dates';
 import type { Action, State, World } from '../engine/types';
 import { act } from './Pointer';
-import { ehrFields, SOP, VISIT_LABEL } from '../engine/world';
+import { ehrFields, SOP, TODAY, VISIT_LABEL } from '../engine/world';
 
 interface P { world: World; state: State; dispatch: (a: Action) => void; frozen?: boolean }
 const OTHERS = ['J. Farrow', 'M. Castell'];
@@ -17,7 +17,7 @@ export function Ehr({ world: w, state: s, dispatch, frozen }: P) {
       <div className="ehr-bar">
         <strong>Larkspur EHR</strong>
         <span>Fennmore General Hospital</span>
-        <span className="ehr-user">Signed in as RCM Agent 07</span>
+        <span className="ehr-user"><span data-testid="ehr-today">{longDate(TODAY)}</span>, signed in as RCM Agent 07</span>
       </div>
       <div className="ehr-menu">
         <span className={e.screen === 'list' ? 'on' : ''}>{claims ? 'Follow-up queue' : 'Schedule'}</span>
@@ -91,6 +91,13 @@ export function Ehr({ world: w, state: s, dispatch, frozen }: P) {
                 <dt>Priority</dt><dd>{w.order.urgent ? 'Urgent' : 'Routine'}</dd>
                 <dt>Ordering provider</dt><dd>{w.order.provider}, NPI {w.order.npi}</dd>
               </dl>
+            </fieldset>
+          )}
+          {patient && w.clinical && patient.id === w.targetId && (
+            <fieldset className="ehr-box" data-testid="ehr-notes">
+              <legend>Clinical notes</legend>
+              <p className="ehr-note">{w.clinical.author}, {longDate(TODAY)}</p>
+              <ul>{w.clinical.notes.map((n) => <li key={n}>{n}</li>)}</ul>
             </fieldset>
           )}
           {patient && w.order && patient.id !== w.targetId && <p className="ehr-note">No open orders for this patient.</p>}

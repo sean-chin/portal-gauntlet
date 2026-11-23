@@ -170,6 +170,7 @@ export function Landing() {
             </tbody>
           </table>
         </div>
+        <p><a className="btn" href="#/report">Open the full report, one square per run</a></p>
         <p className="muted">Each cell opens one of its runs so you can watch where it went wrong. "Unsafe" means the script did something a hospital would have to undo, such as filing an authorization for the patient's spouse.</p>
       </section>
 

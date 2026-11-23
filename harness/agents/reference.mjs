@@ -12,7 +12,10 @@ const LABEL = {
   npi: /npi/i, provider: /provider name|requesting clinician/i, claimNo: /claim (number|id|reference)/i,
 };
 
-export async function agent(page, task) {
+export const agent = (page, task) => run(page, task, true);
+
+/** `careful` off gives the first-draft agent in naive.mjs: same clicks, none of the checking. */
+export async function run(page, task, careful) {
   const portal = page.locator('[data-app=portal]');
   const tab = (id) => page.getByTestId(`tab-${id}`).click();
   const pairs = (root) => root.evaluate((el) => Object.fromEntries([...el.querySelectorAll('dt')].map((dt) => [dt.textContent.trim(), dt.nextElementSibling?.textContent.trim() ?? ''])));
@@ -74,7 +77,8 @@ export async function agent(page, task) {
     await fill('dob', patient.dob);
     await search();
     // Several people can share the member ID. Pick the row with this patient's first name and birth date.
-    await act(() => portal.locator('tbody tr').filter({ hasText: patient.dob }).filter({ hasText: patient.first }).getByRole('button', { name: 'Select' }).click());
+    const rows = portal.locator('tbody tr');
+    await act(() => (careful ? rows.filter({ hasText: patient.dob }).filter({ hasText: patient.first }) : rows.first()).getByRole('button', { name: 'Select' }).click());
   }
   async function chart(mrn) {
     await tab('ehr');
@@ -103,7 +107,7 @@ export async function agent(page, task) {
       const d = await pairs(portal);
       if (!d['Coverage status'].startsWith('Active')) return { status: 'Inactive', termDate: /terminated (\S+)/.exec(d['Coverage status'])[1], ref: d['Transaction ID'] };
       const copay = await portal.locator('tbody tr').filter({ hasText: new RegExp(visit, 'i') }).locator('td').nth(1).textContent();
-      const remaining = d.Remaining ? num(d.Remaining) : num(d['Individual deductible']) - num(d['Met to date']);
+      const remaining = d.Remaining ? num(d.Remaining) : careful ? num(d['Individual deductible']) - num(d['Met to date']) : '';
       return { status: 'Active', plan: d.Plan, copay: num(copay), dedRemaining: remaining, ref: d['Transaction ID'] };
     });
     await chart(mrn);
@@ -118,6 +122,7 @@ export async function agent(page, task) {
     const notes = (await page.getByTestId('ehr-notes').count()) ? await page.getByTestId('ehr-notes').innerText() : '';
     const today = new Date(await page.getByTestId('ehr-today').innerText());
     const answer = (question) => {
+      if (!careful) return /past 12 months/i.test(question) ? 'No' : 'Yes';
       if (/past 12 months/i.test(question)) {
         const m = /performed on ([A-Z][a-z]{2} \d{1,2}, \d{4})/.exec(notes);
         return m && (today - new Date(m[1])) / 864e5 <= 365 ? 'Yes' : 'No';
@@ -164,7 +169,7 @@ export async function agent(page, task) {
         const lines = await portal.locator('tbody tr').evaluateAll((rows) => rows.map((r) => [...r.cells].map((c) => c.textContent.trim())));
         if (lines.length) {
           const stamp = (us) => us.slice(6) + us.slice(0, 2) + us.slice(3, 5);
-          const [, status, paid, reason] = lines.sort((a, b) => stamp(a[0]).localeCompare(stamp(b[0]))).at(-1);
+          const [, status, paid, reason] = careful ? lines.sort((a, b) => stamp(a[0]).localeCompare(stamp(b[0]))).at(-1) : lines[0];
           d = { Status: status, 'Paid amount': paid, 'Adjustment reason': reason };
         }
         const carc = d['Adjustment reason'] ? d['Adjustment reason'].split(':')[0] : '';

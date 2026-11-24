@@ -32,6 +32,10 @@ A run is a URL: `/#/run?task=prior-auth&level=hostile&seed=7`. The same seed alw
 
 On typical and hostile, the authorization request asks three yes or no questions (same service in the past 12 months, symptoms for six weeks or longer, first-line treatment tried without improvement). The answers are in the clinical notes on the chart and take a little reading: a prior study 14 months ago is a "no", and treatment that worked is not treatment that failed. A wrong answer that makes the request look stronger is counted as harm.
 
+### The landing page
+
+The top of the landing page plays three sample runs on a loop. The portal or EHR is on the left. On the right, a log lists each step with its time, along with counters for elapsed time, actions, obstacles and misses. When a run ends, the log shows its score, the verdict and the main reason, plus a link to the full scorecard. The tabs above it let you jump to any of the three runs.
+
 ## Scoring
 
 - Outcome, 80 points. Every field the work order asks for is checked against the truth for that seed, both what was saved in the chart and what was sent to the payer.
